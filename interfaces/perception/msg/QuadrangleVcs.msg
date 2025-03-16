@@ -1,0 +1,12 @@
+float32 leftuppointx
+float32 leftuppointy
+float32 leftuppointz
+float32 rightuppointx
+float32 rightuppointy
+float32 rightuppointz
+float32 rightdownpointx
+float32 rightdownpointy
+float32 rightdownpointz
+float32 leftdownpointx
+float32 leftdownpointy
+float32 leftdownpointz

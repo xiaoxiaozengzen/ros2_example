@@ -1,0 +1,8 @@
+uint16 imglupointposu
+uint16 imglupointposv
+uint16 imgrupointposu
+uint16 imgrupointposv
+uint16 imgrdpointposu
+uint16 imgrdpointposv
+uint16 imgldpointposu
+uint16 imgldpointposv

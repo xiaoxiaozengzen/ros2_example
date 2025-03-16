@@ -1,0 +1,7 @@
+build
+install
+log
+output/*.jpg
+output/*.png
+output/*.avi
+output/*.mp4

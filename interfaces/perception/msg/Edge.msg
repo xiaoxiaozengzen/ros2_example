@@ -1,0 +1,4 @@
+uint8 segment
+bool is_blocked
+float32 confidence
+float32 blocked_confidence

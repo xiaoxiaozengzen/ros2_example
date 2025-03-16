@@ -1,0 +1,4 @@
+deva_common_msgs/LineSegment segment
+bool is_blocked
+float32 confidence
+float32 blocked_confidence

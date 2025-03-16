@@ -1,0 +1,9 @@
+<library path="radar_rviz_panel">
+    <class name="radar_rviz_panel/RadarRviz"
+           type="radar_rviz_panel::RadarRvizPanel"
+           base_class_type="rviz_common::Panel">
+        <description>
+            A Rviz2 panel for radar.
+        </description>
+    </class>
+</library>

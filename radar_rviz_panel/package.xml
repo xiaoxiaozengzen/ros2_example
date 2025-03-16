@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>radar_rviz_panel</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="yanduochao@megvii.com">user</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>math</depend>
+  <depend>rclcpp</depend>
+  <depend>rviz_common</depend>
+  <depend>libqt5-widgets</depend>
+  <depend>rviz2</depend>
+  <depend>devastator_perception_msgs</depend>
+  <depend>radar_ars548_nodes</depend>
+  <exec_depend>geometry_msgs</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <rviz plugin="plugin_description.xml"/>
+    <build_type condition="$ROS_VERSION == 2">ament_cmake</build_type>
+  </export>
+</package>

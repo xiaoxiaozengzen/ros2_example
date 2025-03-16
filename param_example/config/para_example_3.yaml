@@ -1,0 +1,7 @@
+/**:
+  ros__parameters:
+    path: "weishun"
+    vev1:
+      -
+        name: "name1"
+        value: "value1"

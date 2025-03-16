@@ -1,0 +1,6 @@
+para_example_node:
+  ros__parameters:
+    vec2:
+      -
+        name: 1
+        value: "value2"
