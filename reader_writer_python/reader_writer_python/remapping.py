@@ -2,6 +2,7 @@ from mcap_ros2.writer import Writer
 from mcap.reader import make_reader
 from mcap_ros2.decoder import DecoderFactory
 from e171_msgs.msg._e171 import E171
+from rclpy.serialization import serialize_message
 
 def remapping(input_bag: str, output_bag: str):
     with open(input_bag, "rb") as f:
@@ -36,12 +37,10 @@ def remapping(input_bag: str, output_bag: str):
                 print("message.sequence: ", message.sequence)
                 print("message.data: ", message.data)
                 writer_sequence += 1
-                writer_message = E171()
-                writer_message = message.data
                 writer.write_message(
                     topic="/my/e171/remapping",
                     schema=writer_schema,
-                    message=writer_message,
+                    message=decoded_message,
                     sequence=writer_sequence,
                     log_time=message.log_time,
                     publish_time=message.publish_time,
