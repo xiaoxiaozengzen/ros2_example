@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
           "reader = reader_writer_python.reader:main",
           "writer = reader_writer_python.writer:main",
+          "remapping = reader_writer_python.remapping:main",
         ],
     },
 )
