@@ -1,8 +1,6 @@
 from mcap_ros2.writer import Writer
 from mcap.reader import make_reader
 from mcap_ros2.decoder import DecoderFactory
-from e171_msgs.msg._e171 import E171
-from rclpy.serialization import serialize_message
 import argparse
 
 
