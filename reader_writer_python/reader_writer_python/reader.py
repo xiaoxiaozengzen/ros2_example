@@ -29,18 +29,24 @@ def read_messages(args):
             print("statistic.schema_count: ", statistic.schema_count)
             for key, value in statistic.channel_message_counts.items():
                 print(f"channel_message_counts: {key} = {value}")
-
-        print("==========schemas==========")
-        print("size: ", len(s.schemas))
-        schema = s.schemas[args.schema_id]
-        print("schema.id: ", schema.id)
-        print("schema.data: ", schema.data)
-        print("schema.encoding: ", schema.encoding)
-        print("schema.name: ", schema.name)
-
+        
+        aim_topic_name = args.topic_name
+        aim_chanel_id = 0
+        aim_schema_id = 0
+        
+        print("aim_topic_name: ", aim_topic_name)       
+        for id, single_channel in s.channels.items():
+            if single_channel.topic == aim_topic_name:
+                aim_chanel_id = single_channel.id
+                print("aim_chanel_id: ", aim_chanel_id)
+                aim_schema_id = single_channel.schema_id
+                print("aim_schema_id: ", aim_schema_id)
+                break
+            
+        
         print("==========channels==========")
         print("size: ", len(s.channels))
-        channel = s.channels[args.schema_id]
+        channel = s.channels[aim_chanel_id]
         print("channel.id: ", channel.id)
         print("channel.topic: ", channel.topic)
         print("channel.message_encoding: ", channel.message_encoding)
@@ -48,6 +54,16 @@ def read_messages(args):
         # qos
         for metadata_key, metadata_value in channel.metadata.items():
             print(f"metadata: {metadata_key} = {metadata_value}")
+
+        print("==========schemas==========")
+        print("size: ", len(s.schemas))
+        schema = s.schemas[aim_schema_id]
+        print("schema.id: ", schema.id)
+        print("schema.data: ", schema.data)
+        print("schema.encoding: ", schema.encoding)
+        print("schema.name: ", schema.name)
+
+
 
         print("==========chunk_indexes==========")
         print("size: ", len(s.chunk_indexes))
@@ -85,12 +101,14 @@ def read_messages(args):
                 "----------McapReader::iter_decoded_messages::decoded_message----------"
             )
             print("decoded_message: ", decoded_message)
-            print("decoded_message.header: ", decoded_message.header)
-            header = decoded_message.header
-            print("decoded_message.header.stamp.sec: ", header.stamp.sec)
-            print("decoded_message.header.stamp.nanosec: ", header.stamp.nanosec)
-            print("decoded_message.header.frame_id: ", header.frame_id)
-            print("decoded_message.data: ", decoded_message.data)
+            if args.topic_name == "/my/e171" or args.topic_name == "/my/e171/remapping":
+                # Deserialize the message using the appropriate message type
+                print("decoded_message.header: ", decoded_message.header)
+                header = decoded_message.header
+                print("decoded_message.header.stamp.sec: ", header.stamp.sec)
+                print("decoded_message.header.stamp.nanosec: ", header.stamp.nanosec)
+                print("decoded_message.header.frame_id: ", header.frame_id)
+                print("decoded_message.data: ", decoded_message.data)
 
         del reader
 
@@ -107,15 +125,11 @@ def main():
         default="/my/e171",
         help="output bag path (folder or filepath) to write to",
     )
-    parser.add_argument(
-        "-s", "--schema_id", type=int, default=1, help="schema id to write to"
-    )
+    
 
     args = parser.parse_args()
     topic_name = args.topic_name
     print("topic_name: ", topic_name)
-    schema_id = args.schema_id
-    print("schema_id: ", schema_id)
     read_messages(args)
 
 
