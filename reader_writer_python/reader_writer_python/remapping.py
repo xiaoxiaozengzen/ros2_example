@@ -14,20 +14,41 @@ def remapping(args):
         print(f"library: {header.library}")
 
         s = reader.get_summary()
-        print("==========schemas==========")
-        print("size: ", len(s.schemas))
-        my_schema = s.schemas[args.schema_id]
-        print("schema.id: ", my_schema.id)
-        print("schema.data: ", my_schema.data)
-        print("schema.encoding: ", my_schema.encoding)
-        print("schema.name: ", my_schema.name)
-
+        single_channle = None
+        single_schema = None
+        
+        for key, value in s.channels.items():
+            if value.topic == args.topic_name:
+                single_channle = value
+                print("find topic {} in mcap".format(args.topic_name))
+                break
+              
+        if single_channle is None:
+            raise ValueError(
+                "The topic {} is not found in the input bag file.".format(
+                    args.topic_name
+                )
+            )
+            
+        for key, value in s.schemas.items():
+            if value.id == single_channle.schema_id:
+                single_schema = value
+                print("find schema {} in mcap".format(value.name))
+                break
+              
+        if single_schema is None:
+            raise ValueError(
+                "The schema {} is not found in the input bag file.".format(
+                    single_channle.schema_id
+                )
+            )
+        
+        # 计数
         writer_sequence = 0
-
         with open(args.output_bag, "wb") as f2:
             writer = Writer(f2)
             writer_schema = writer.register_msgdef(
-                my_schema.name, my_schema.data.decode("utf-8")
+                single_schema.name, single_schema.data.decode("utf-8")
             )
 
             for (
@@ -35,14 +56,10 @@ def remapping(args):
                 channel,
                 message,
                 decoded_message,
-            ) in reader.iter_decoded_messages(topics=["/my/e171"]):
-                print("message: ", message)
-                print("decoded_message: ", decoded_message)
-                print("message.sequence: ", message.sequence)
-                print("message.data: ", message.data)
+            ) in reader.iter_decoded_messages(topics=[args.topic_name]):
                 writer_sequence += 1
                 writer.write_message(
-                    topic=args.topic_name,
+                    topic=args.remapping_topic_name,
                     schema=writer_schema,
                     message=decoded_message,
                     sequence=writer_sequence,
@@ -64,18 +81,20 @@ def main():
         "-t",
         "--topic_name",
         type=str,
-        default="/my/e171/remapping",
-        help="Topic name to remap",
+        help="Output topic name",
     )
     parser.add_argument(
-        "-s", "--schema_id", type=int, default=1, help="Schema ID to remap"
+        "-r",
+        "--remapping_topic_name",
+        type=str,
+        help="Topic name to remap",
     )
+
     args = parser.parse_args()
-    print("topic_name: ", args.topic_name)
-    print("schema_id: ", args.schema_id)
     print("input_bag: ", args.input_bag)
     print("output_bag: ", args.output_bag)
-    print("==========remapping==========")
+    print("topic_name: ", args.topic_name)
+    print("remapping_topic_name: ", args.remapping_topic_name)
 
     remapping(args)
 
