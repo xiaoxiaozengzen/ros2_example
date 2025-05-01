@@ -33,6 +33,8 @@ void MyPub::MytestPub() {
   while(rclcpp::ok()) {
       count++;
       MyTestMsg msg;
+      msg.header.stamp.sec = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+      msg.header.stamp.nanosec = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count() % 1000000000;
       msg.a = count;
       msg.b = 0x20;
 
@@ -48,6 +50,8 @@ void MyPub::FramePub() {
   std::uint32_t count = 0;
   while(rclcpp::ok()) {
     count++;
+    msg.header.stamp.sec = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    msg.header.stamp.nanosec = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count() % 1000000000;
     msg.counter = count;
     
     frame_pub_->publish(msg);
@@ -59,6 +63,7 @@ void MyPub::E171Pub() {
   E171Msg msg;
   auto now = std::chrono::system_clock::now();
   msg.header.stamp.sec = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+  msg.header.stamp.nanosec = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() % 1000000000;
   msg.header.frame_id = "e171";
   msg.data.push_back('1');
   msg.data.push_back('2');
