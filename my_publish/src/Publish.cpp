@@ -14,6 +14,11 @@ namespace cgz {
 
       e171_pub_ = this->create_publisher<E171Msg>("/my/e171", 10);
       e171_th_ = std::thread(std::bind(&MyPub::E171Pub, this));
+
+      first_marker_pub_ = this->create_publisher<MarkerArrayMsg>("/my/first_marker", 10);
+      second_marker_pub_ = this->create_publisher<MarkerArrayMsg>("/my/second_marker", 10);
+      first_timer_ = this->create_wall_timer(std::chrono::seconds(1), std::bind(&MyPub::FirstTimer, this));
+      second_timer_ = this->create_wall_timer(std::chrono::seconds(1), std::bind(&MyPub::SecondTimer, this));
     }
 
 MyPub::~MyPub() {
@@ -80,6 +85,69 @@ void MyPub::E171Pub() {
     std::this_thread::sleep_for(std::chrono::seconds(2));
   }
 }
+
+void MyPub::FirstTimer() {
+  static int count = 0;
+  count++;
+
+  MarkerArrayMsg msg;
+  MarkerMsg marker;
+  marker.header.frame_id = "ego_vehicle";
+  marker.header.stamp.sec = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  marker.header.stamp.nanosec = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count() % 1000000000;
+  marker.ns = "first";
+  marker.id = count;
+  marker.type = MarkerMsg::SPHERE;
+  marker.action = MarkerMsg::ADD;
+  marker.pose.position.x = 10.0 + count;
+  marker.pose.position.y = 20.0;
+  marker.pose.position.z = 30.0;
+  marker.scale.x = 5.0;
+  marker.scale.y = 5.0;
+  marker.scale.z = 5.0;
+  marker.color.r = 1.0f;
+  marker.color.g = 0.0f;
+  marker.color.b = 0.0f;
+  marker.color.a = 1.0f;
+  marker.lifetime.sec = 0;
+  marker.lifetime.nanosec = 1000000000;
+
+  msg.markers.push_back(marker);
+  
+  first_marker_pub_->publish(msg);
+}
+
+void MyPub::SecondTimer() {
+  static int count = 0;
+  count++;
+
+  MarkerArrayMsg msg;
+  MarkerMsg marker;
+  marker.header.frame_id = "ego_vehicle";
+  marker.header.stamp.sec = 0;
+  marker.header.stamp.nanosec = 0;
+  marker.ns = "second";
+  marker.id = count;
+  marker.type = MarkerMsg::SPHERE;
+  marker.action = MarkerMsg::ADD;
+  marker.pose.position.x = 40.0 + count;
+  marker.pose.position.y = 50.0;
+  marker.pose.position.z = 60.0;
+  marker.scale.x = 5.0;
+  marker.scale.y = 5.0;
+  marker.scale.z = 5.0;
+  marker.color.r = 0.0f;
+  marker.color.g = 1.0f;
+  marker.color.b = 0.0f;
+  marker.color.a = 1.0f;
+  marker.lifetime.sec = 0;
+  marker.lifetime.nanosec = 1000000000;
+
+  msg.markers.push_back(marker);
+  
+  second_marker_pub_->publish(msg);
+}
+
 } // namespace cgz
 
 

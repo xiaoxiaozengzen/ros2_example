@@ -17,6 +17,7 @@
   <depend>ament_index_cpp</depend>
   <depend>devastator_perception_msgs</depend>
   <depend>e171_msgs</depend>
+  <depend>visualization_msgs</depend>
 
   <exec_depend>ros2launch</exec_depend>
 
