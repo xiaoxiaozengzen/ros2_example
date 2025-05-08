@@ -27,6 +27,8 @@ public:
 
     client_thread_ = std::thread(&TimerNode::client_thread, this);
     service_thread_ = std::thread(&TimerNode::service_thread, this);
+    timer_thread_ = std::thread(&TimerNode::thread_timer_callback, this);
+    
   }
 
   ~TimerNode()
@@ -39,6 +41,9 @@ public:
     }
     if (service_thread_.joinable()) {
       service_thread_.join();
+    }
+    if(timer_thread_.joinable()) {
+      timer_thread_.join();
     }
   }
 private:
@@ -90,12 +95,30 @@ private:
   rclcpp::TimerBase::SharedPtr over_timer_;
   std::uint32_t over_count_ = 0;
 
+  // 创建线程，实现直接调用timer的回调函数
   std::mutex mutex_;
   std::condition_variable cv_;
   bool is_over_{false};
   bool is_running_{false};
   std::thread client_thread_;
   std::thread service_thread_;
+
+  // 创建线程，将timer在线程中初始化
+  // 改timer任然在主线程中调用callback函数，有可能阻塞主线程
+  rclcpp::TimerBase::SharedPtr thread_timer_;
+  std::thread timer_thread_;
+  std::uint32_t thread_count_ = 0;
+  void thread_timer_callback()
+  {
+    thread_timer_ = this->create_wall_timer(
+      std::chrono::seconds(1),
+      std::bind(&TimerNode::thread_timer, this));
+  }
+  void thread_timer()
+  {
+    thread_count_++;
+    RCLCPP_INFO(this->get_logger(), "Thread Timer callback executed %u times", thread_count_);
+  }
 };
 int main(int argc, char * argv[])
 {
