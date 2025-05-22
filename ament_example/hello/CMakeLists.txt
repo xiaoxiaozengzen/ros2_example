@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.21)
 project(hello)
 
 # Default to C99
@@ -15,8 +15,17 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+# 编译的时候会打印这个变量，但是printenv的时候不会打印
+message("ENV{CMAKE_PREFIX_PATH} = $ENV{CMAKE_PREFIX_PATH}")
+if(DEFINED CMAKE_PREFIX_PATH)
+  message("CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
+else()
+  message("CMAKE_PREFIX_PATH is not defined")
+endif()
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
+message("ament_cmake_DIR = ${ament_cmake_DIR}")
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
