@@ -15,7 +15,11 @@ colcon build --packages-up-to hello
 发现，其在编译期间会设置`CMAKE_PREFIX_PATH`为`/opt/ros/foxy`，但是在编译前跟编译后，都printenv这个环境变量。这也解释了怎么找到ros2提供的相关cmake package
 
 **注意**
-source了ros2的环境变量的时候，会发现其设置了`AMENT_PREFIX_PATH=/opt/ros/foxy`，难道是根据这个在编译的时候设置了环境变量？
+source了ros2的环境变量的时候，会发现其设置了`AMENT_PREFIX_PATH=/opt/ros/foxy`，colcon会根据这个环境变量去查找相关的包的位置
+其还会设置 `PYTHONPATH` ，让colcon能找到一些ros相关的python包
+
+`https://github1s.com/colcon/colcon-ros/blob/master/colcon_ros/task/__init__.py#L17` 
+代码中发现其会在`CMAKE_PREFIX_PATH`中添加`AMENT_PREFIX_PATH`中的内容
 
 ## 加载install下的脚本
 
