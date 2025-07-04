@@ -1,26 +1,16 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>my_publish</name>
+  <name>interface_cmake</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
   <maintainer email="user@todo.todo">user</maintainer>
   <license>TODO: License declaration</license>
 
-  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>rclcpp</depend>
-  <depend>rclcpp_components</depend>
-  <depend>rosbag2_cpp</depend>
-  <depend>rosbag2_storage</depend>
-  <depend>rcutils</depend>
-  <depend>ament_index_cpp</depend>
-  <depend>devastator_perception_msgs</depend>
-  <depend>e171_msgs</depend>
-  <depend>visualization_msgs</depend>
-  <depend>interface_cmake</depend>
-
-  <exec_depend>ros2launch</exec_depend>
+  <depend>std_msgs</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
