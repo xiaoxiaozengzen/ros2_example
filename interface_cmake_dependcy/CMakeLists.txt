@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(interface_cmake)
+project(interface_cmake_dependcy)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -19,13 +19,13 @@ endif()
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
-add_library(plus INTERFACE)
-target_include_directories(plus INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-
-ament_export_include_directories(include)
-ament_export_dependencies(interface_cmake_dependcy)
+file(GLOB_RECURSE interface_cmake_dependcy_SRC_FILES
+  "src/*.cpp"
+)
+ament_auto_add_library(interface_cmake_dependcy
+  SHARED
+  ${interface_cmake_dependcy_SRC_FILES}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
