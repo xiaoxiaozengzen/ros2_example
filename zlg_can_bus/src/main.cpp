@@ -33,6 +33,15 @@ public:
 
     bool Init() {
         std::cout << "sizeof(ZCANDataObj): " << sizeof(ZCANDataObj) << std::endl;
+        std::size_t date_0 = offsetof(ZCANDataObj, dataType);
+        std::cout << "offsetof(ZCANDataObj, dataType): " << date_0 << std::endl;
+        std::size_t date_1 = offsetof(ZCANDataObj, chnl);
+        std::cout << "offsetof(ZCANDataObj, chnl): " << date_1 << std::endl;
+        std::size_t date_2 = offsetof(ZCANDataObj, flag);
+        std::cout << "offsetof(ZCANDataObj, flag): " << date_2 << std::endl;
+        std::size_t date_3 = offsetof(ZCANDataObj, data);
+        std::cout << "offsetof(ZCANDataObj, data): " << date_3 << std::endl;
+
         return true;
     }
 
