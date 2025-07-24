@@ -141,7 +141,8 @@ def read_messages(args):
             
             offest += 8
             timestamp = struct.unpack('<Q',data[offest:offest +8])[0]
-            # print("timestamp: ", timestamp)
+            timestamp_s = timestamp / 1e9
+            print("timestamp: ", timestamp_s, "s")
             
             offest += 8
             count_of_data = struct.unpack('<Q', data[offest:offest + 8])[0]
