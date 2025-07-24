@@ -9,9 +9,67 @@ from std_msgs.msg import String, Int8MultiArray
 from mcap.reader import make_reader
 from mcap_ros2.decoder import DecoderFactory
 
+# Size of ZCANDataObj in bytes
 size_of_ZCANDataObj = 100
+
+# Packet types
 PACKET_TYPE_CAN = 0
 PACKET_TYPE_CANFD = 1
+
+# Channel IDs
+CAN_CHANNEL_ADREDUNDANCY = 0
+CAN_CHANNEL_CANFD2 = 1
+CAN_CHANNEL_CHASSIS = 2
+CAN_CHANNEL_CANFD3 = 3
+CAN_CHANNEL_CANFD1 = 4
+
+def parse_fmr(channel_id: int, data: memoryview, blf_file: can.io.BLFWriter, offest: int):
+    count_offest = offest
+    count_offest += 4
+    message_timestamp = struct.unpack('<Q', data[count_offest:count_offest + 8])[0]
+
+    count_offest += 8
+    # flag
+
+    count_offest += 4
+    # extraData[4]
+
+    count_offest += 4
+    message_can_id = struct.unpack('<I', data[count_offest:count_offest + 4])[0]
+
+    count_offest += 4
+    message_data_length = struct.unpack('<B', data[count_offest:count_offest + 1])[0]
+    print("message_id: {:X}, mesage_channel: {}, message_dlc: {}, message_timestamp {}".format(
+        message_can_id, channel_id, message_data_length, message_timestamp / 1e9
+    ))
+
+    count_offest += 1
+    # flags
+
+    count_offest += 1
+    # res0
+
+    count_offest += 1
+    # res2
+
+    count_offest += 1
+    # data
+
+    fmr_can_message = can.Message(
+        timestamp=message_timestamp / 1e9,  # Convert to seconds
+        arbitration_id=message_can_id,
+        is_extended_id=False,
+        is_remote_frame=False,
+        is_error_frame=False,
+        channel=channel_id,
+        dlc=message_data_length,
+        data=data[count_offest:count_offest + message_data_length],
+        is_fd=True,
+        is_rx=True,
+        bitrate_switch=True,
+        error_state_indicator=False
+    )
+    blf_file.on_message_received(fmr_can_message)
 
 def read_messages(args):
     with open(args.input, "rb") as f, open(args.output, "wb+") as f2:
@@ -111,52 +169,7 @@ def read_messages(args):
                 # extraData[4]
                 
                 if data_type == PACKET_TYPE_CANFD and channel == args.channel_id:
-                  print("{}_th channel: ".format(i), channel)
-                  count_offest += 4
-                  message_timestamp = struct.unpack('<Q', data[count_offest:count_offest + 8])[0]
-                  print("{}_th message_timestamp: ".format(i), message_timestamp)
-                  
-                  count_offest += 8
-                  # flag
-                  
-                  count_offest += 4
-                  # extraData[4]
-                  
-                  count_offest += 4
-                  message_can_id = struct.unpack('<I', data[count_offest:count_offest + 4])[0]
-                  print("{}_th message_can_id: {:X}".format(i, message_can_id))
-                  
-                  count_offest += 4
-                  message_data_length = struct.unpack('<B', data[count_offest:count_offest + 1])[0]
-                  print("{}_th message_data_length: ".format(i), message_data_length)
-                  
-                  count_offest += 1
-                  # flags
-                  
-                  count_offest += 1
-                  # res0
-                  
-                  count_offest += 1
-                  # res2
-                  
-                  count_offest += 1
-                  # data
-                  
-                  fmr_can_message = can.Message(
-                      timestamp=message_timestamp / 1e9,  # Convert to seconds
-                      arbitration_id=message_can_id,
-                      is_extended_id=False,
-                      is_remote_frame=False,
-                      is_error_frame=False,
-                      channel=channel - 1,
-                      dlc=message_data_length,
-                      data=data[count_offest:count_offest + message_data_length],
-                      is_fd=True,
-                      is_rx=True,
-                      bitrate_switch=True,
-                      error_state_indicator=False
-                  )
-                  blf_file.on_message_received(fmr_can_message)
+                    parse_fmr(channel, data, blf_file, count_offest)
                 else:
                   continue
         
