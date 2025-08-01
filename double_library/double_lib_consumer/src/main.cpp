@@ -2,6 +2,9 @@
 #include "double_lib_first/add/add.hpp"
 
 int main(int argc, char **argv) {
+  std::cout << "argc: " << argc << std::endl;
+  std::cout << "argv[0]: " << argv[0] << std::endl;
+  
   int a = 5;
   int b = 10;
 

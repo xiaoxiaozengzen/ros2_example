@@ -20,6 +20,7 @@ find_package(ament_cmake REQUIRED)
 
 add_library(double_lib_first SHARED
   src/add.cpp
+  src/plus.cpp
 )
 target_include_directories(double_lib_first PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -37,6 +38,7 @@ install(DIRECTORY include/
   DESTINATION include/double_lib_first
 )
 ament_export_include_directories(include)
+ament_export_include_directories(include/double_lib_first)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
