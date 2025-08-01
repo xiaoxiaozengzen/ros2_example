@@ -1,8 +1,6 @@
 #include <csignal>
 #include <rclcpp/rclcpp.hpp>
 #include "my_publish/Publish.hpp"
-#include "interface_cmake/plus/plus.hpp"
-#include "interface_cmake_dependcy/sub/sub.hpp"
 
 namespace cgz {
 
@@ -46,12 +44,6 @@ void MyPub::MytestPub() {
       msg.b = 0x20;
 
       mytest_pub_->publish(msg);
-      int a = 10;
-      int b = 20;
-      int result = plus(a, b);
-      RCLCPP_INFO(this->get_logger(), "Result of plus: %d", result);
-      int sub_result = sub(a, b);
-      RCLCPP_INFO(this->get_logger(), "Result of sub: %d", sub_result);
       std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 }
