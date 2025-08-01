@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(ros2_quality_service)
+project(ros2_quality_of_service)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
