@@ -8,13 +8,12 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/qos.hpp"
+#include "rclcpp/node_options.hpp"
+#include "rclcpp/context.hpp"
 
 #include "devastator_perception_msgs/msg/my_test.hpp"
 
 using namespace std::chrono_literals;
-
-/* This example creates a subclass of Node and uses std::bind() to register a
-* member function as a callback from the timer. */
 
 class MinimalPublisher : public rclcpp::Node
 {
@@ -34,10 +33,24 @@ class MinimalPublisher : public rclcpp::Node
     void get_node_options(rclcpp::NodeOptions & options) {
       std::cout << "================== get_node_options ==================" << std::endl;
       const rcl_node_options_t * node_options = options.get_rcl_node_options();
-      std::cout << std::hex << "rcl_node_options_t domain_id: " << node_options->domain_id << std::endl;
+      std::cout << std::dec << "rcl_node_options_t domain_id: " << node_options->domain_id << std::endl;
       std::cout << std::boolalpha << "rcl_node_options_t use_global_arguments: " << node_options->use_global_arguments << std::endl;
       std::cout << std::boolalpha << "rcl_node_options_t enable_rosout: " << node_options->enable_rosout << std::endl;
+      rcl_arguments_t rcl_arguments = node_options->arguments;
+      std::cout << "rcl_arguments_t.impl address: " << rcl_arguments.impl << std::endl;
 
+      std::cout << "=================== context ==================" << std::endl;
+      rclcpp::Context::SharedPtr context = options.context();
+      bool context_is_vaild = context->is_valid();
+      std::cout << std::boolalpha << "Context is valid: " << context_is_vaild << std::endl;
+      rclcpp::InitOptions init_options = context->get_init_options();
+      std::cout << std::boolalpha << "InitOptions shutdown_on_sigint: " << init_options.shutdown_on_sigint << std::endl;
+      bool auto_initialize_logging = init_options.auto_initialize_logging();
+      std::cout << std::boolalpha << "InitOptions auto_initialize_logging: " << auto_initialize_logging << std::endl;
+      const rcl_init_options_t * rcl_init_options = init_options.get_rcl_init_options();
+      std::cout << "rcl_init_options_t.impl address: " << rcl_init_options->impl << std::endl;
+
+      std::cout << "=================== arguments ==================" << std::endl;
       const std::vector<std::string> arguments = options.arguments();
       std::cout << "The amount of arguments: " << arguments.size() << std::endl;
       for(auto& arg : arguments)
@@ -69,7 +82,8 @@ class MinimalPublisher : public rclcpp::Node
       {
         std::cout << "History: Unknown" << std::endl;
       }
-      std::cout << std::dec << "Depth: " << profile.depth << std::endl;
+      std::size_t depth = profile.depth;
+      std::cout << std::dec << "Depth: " << depth << std::endl;
 
       rmw_qos_reliability_policy_t reliability = profile.reliability;
       if(reliability == rmw_qos_reliability_policy_t::RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
@@ -89,8 +103,53 @@ class MinimalPublisher : public rclcpp::Node
         std::cout << "Reliability: Unknown" << std::endl;
       }
 
+      rmw_qos_durability_policy_t durability = profile.durability;
+      if(durability == rmw_qos_durability_policy_t::RMW_QOS_POLICY_DURABILITY_SYSTEM_DEFAULT)
+      {
+        std::cout << "Durability: RMW_QOS_POLICY_DURABILITY_SYSTEM_DEFAULT" << std::endl;
+      }
+      else if(durability == rmw_qos_durability_policy_t::RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL)
+      {
+        std::cout << "Durability: RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL" << std::endl;
+      }
+      else if(durability == rmw_qos_durability_policy_t::RMW_QOS_POLICY_DURABILITY_VOLATILE)
+      {
+        std::cout << "Durability: RMW_QOS_POLICY_DURABILITY_VOLATILE" << std::endl;
+      }
+      else
+      {
+        std::cout << "Durability: Unknown" << std::endl;
+      }
+
       rmw_time_t deadline = profile.deadline;
       std::cout << "Deadline: " << deadline.sec << "s " << deadline.nsec << "ns" << std::endl;
+
+      rmw_time_t lifespan = profile.lifespan;
+      std::cout << "Lifespan: " << lifespan.sec << "s " << lifespan.nsec << "ns" << std::endl;
+
+      rmw_qos_liveliness_policy_t liveliness = profile.liveliness;
+      if(liveliness == rmw_qos_liveliness_policy_t::RMW_QOS_POLICY_LIVELINESS_SYSTEM_DEFAULT)
+      {
+        std::cout << "Liveliness: RMW_QOS_POLICY_LIVELINESS_SYSTEM_DEFAULT" << std::endl;
+      }
+      else if(liveliness == rmw_qos_liveliness_policy_t::RMW_QOS_POLICY_LIVELINESS_AUTOMATIC)
+      {
+        std::cout << "Liveliness: RMW_QOS_POLICY_LIVELINESS_AUTOMATIC" << std::endl;
+      }
+      else if(liveliness == rmw_qos_liveliness_policy_t::RMW_QOS_POLICY_LIVELINESS_MANUAL_BY_TOPIC)
+      {
+        std::cout << "Liveliness: RMW_QOS_POLICY_LIVELINESS_MANUAL_BY_TOPIC" << std::endl;
+      }
+      else
+      {
+        std::cout << "Liveliness: Unknown" << std::endl;
+      }
+
+      rmw_time_t liveliness_lease_duration = profile.liveliness_lease_duration;
+      std::cout << "Liveliness Lease Duration: " << liveliness_lease_duration.sec << "s " << liveliness_lease_duration.nsec << "ns" << std::endl;
+
+      bool avoid_ros_namespace_conventions = profile.avoid_ros_namespace_conventions;
+      std::cout << std::boolalpha << "Avoid ROS Namespace Conventions: " << avoid_ros_namespace_conventions << std::endl;
     }
 
     void timer_callback()
@@ -110,11 +169,11 @@ class MinimalPublisher : public rclcpp::Node
     rclcpp::QoS qos_;
 };
 
-void set_node_options(rclcpp::NodeOptions & options) {
+void set_node_options([[maybe_unused]]rclcpp::NodeOptions & options) {
 
 }
 
-void set_qos(rclcpp::QoS & qos) {
+void set_qos([[maybe_unused]]rclcpp::QoS & qos) {
 
 }
 
@@ -129,7 +188,13 @@ int main(int argc, char * argv[])
   rclcpp::QoS qos2(qos_init);
   rclcpp::QoS qos3(qos_init2);
 
-  rclcpp::init(argc, argv);
+  rclcpp::InitOptions init_options;
+#if 0
+  // 会导致 Ctrl+C 无法正常关闭节点
+  init_options.shutdown_on_sigint = false;
+#endif
+  
+  rclcpp::init(argc, argv, init_options);
   rclcpp::spin(std::make_shared<MinimalPublisher>(node_name, options, qos2));
   rclcpp::shutdown();
   return 0;
