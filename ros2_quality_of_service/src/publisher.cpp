@@ -15,6 +15,22 @@
 
 using namespace std::chrono_literals;
 
+/**
+ * ros2跟dds的命名规范：
+ * 1.参考 https://design.ros2.org/articles/topic_and_service_names.html#ros-specific-namespace-prefix
+ * 2. 为了方便跟ros消息区别，所有通过ros创建的dds消息都会默认添加 /rx前缀，其中x是一个单字符，表示是ros中那个子系统
+ *    例如：rt表示ros topic；rq表示ros request；rr表示ros response；rs表示ros service；rp表示ros parameter；ra表示ros action
+ */
+
+std::string GetCurrentTime() {
+  auto now = std::chrono::system_clock::now();
+  int seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+  std::uint32_t nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() % 1000000000;
+  std::stringstream ss;
+  ss << "[" << seconds << "." << std::setfill('0') << std::setw(9) << nanoseconds << "]";
+  return ss.str();
+}
+
 class MinimalPublisher : public rclcpp::Node
 {
   public:
@@ -22,10 +38,10 @@ class MinimalPublisher : public rclcpp::Node
     : Node(topic_name, options), options_(options), qos_(qos)
     {
       get_node_options(options_);
-      get_qos(qos_);
       qos_.keep_last(2);
-
-      publisher_ = this->create_publisher<devastator_perception_msgs::msg::MyTest>("topic", qos_);
+      get_qos(qos_);
+      
+      publisher_ = this->create_publisher<devastator_perception_msgs::msg::MyTest>("/my/qos/topic", qos_);
       timer_ = this->create_wall_timer(1000ms, std::bind(&MinimalPublisher::timer_callback, this));
     }
 
@@ -148,17 +164,23 @@ class MinimalPublisher : public rclcpp::Node
       rmw_time_t liveliness_lease_duration = profile.liveliness_lease_duration;
       std::cout << "Liveliness Lease Duration: " << liveliness_lease_duration.sec << "s " << liveliness_lease_duration.nsec << "ns" << std::endl;
 
+      /**
+       * 如果为true，则表示任何ROS Specific Namespace Prefix都会被避免。
+       * 例如：对于DDS来说，ros2消息将不在默认加前缀"rt"，这一般用于通过ROS2 topic直接跟原始的dds进行通信
+       */
       bool avoid_ros_namespace_conventions = profile.avoid_ros_namespace_conventions;
       std::cout << std::boolalpha << "Avoid ROS Namespace Conventions: " << avoid_ros_namespace_conventions << std::endl;
     }
 
     void timer_callback()
     {
+      static std::uint64_t counter = 0;
+      counter++;
       auto message = devastator_perception_msgs::msg::MyTest();
-      message.a = 1;
+      message.a = counter;
       message.b = 2;
       message.c = true;
-      RCLCPP_INFO(this->get_logger(), "Publishing: ");
+      RCLCPP_INFO(this->get_logger(), "Publishing %d!", message.a);
       publisher_->publish(message);
     }
 
@@ -182,11 +204,25 @@ int main(int argc, char * argv[])
   std::string node_name = "minimal_publisher";
   rclcpp::NodeOptions options = rclcpp::NodeOptions();
 
-  rclcpp::QoSInitialization qos_init = rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default);
-  rclcpp::QoSInitialization qos_init2 = rclcpp::QoSInitialization(rmw_qos_history_policy_t::RMW_QOS_POLICY_HISTORY_KEEP_LAST, 10);
-  rclcpp::QoS qos(10);
-  rclcpp::QoS qos2(qos_init);
-  rclcpp::QoS qos3(qos_init2);
+  /**
+   * typedef struct rmw_qos_profile_t
+   * {
+   *   enum rmw_qos_history_policy_t history;
+   *   size_t depth;
+   *   enum rmw_qos_reliability_policy_t reliability;
+   *   enum rmw_qos_durability_policy_t durability;
+   *   rmw_time_t deadline;
+   *   rmw_time_t lifespan;
+   *   enum rmw_qos_liveliness_policy_t liveliness;
+   *   rmw_time_t liveliness_lease_duration;
+   *   bool avoid_ros_namespace_conventions;
+   * }
+   */
+  rclcpp::QoSInitialization qos_init1 = rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default);
+  rclcpp::QoSInitialization qos_init2 = rclcpp::QoSInitialization(rmw_qos_history_policy_t::RMW_QOS_POLICY_HISTORY_KEEP_LAST, 20);
+  rclcpp::QoS qos0(10);
+  rclcpp::QoS qos1(qos_init1);
+  rclcpp::QoS qos2(qos_init2, rmw_qos_profile_default);
 
   rclcpp::InitOptions init_options;
 #if 0

@@ -6,7 +6,9 @@ ROS2提供了一系列的QOS，用于调整节点间的通信。设置合适的Q
 
 [QOS官网文档](https://docs.ros.org/en/foxy/Concepts/About-Quality-of-Service-Settings.html)
 
-QOS可以应用于Pub、Sub、Client、Server这些。但是如果使用的QOS不同，可能消息无法正确发送
+QOS可以应用于Pub、Sub、Client、Server这些。
+
+**注意: 如果发送和接收端使用的QOS不同，可能消息无法正确发送**
 
 # 策略
 
@@ -35,7 +37,8 @@ QOS可以应用于Pub、Sub、Client、Server这些。但是如果使用的QOS�
 # QoS Profile
 
 Profiles可以让开发者关注于应用本身，而不是配置QoS。一个Profile会定义一堆policies。
-当前有些预先定义好的，默认情况下的QoS：
+当前有些预先定义好的, 可以参考 [已定义](https://github1s.com/ros2/rmw/blob/foxy/rmw/include/rmw/qos_profiles.h#L25)
+默认情况下的QoS：
 * Publisher$Subscriptions: 
   * keep last ，queen size = 10，reliable，
 * Services:

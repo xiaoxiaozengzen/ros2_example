@@ -20,6 +20,7 @@ find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
 ament_auto_add_executable(publisher src/publisher.cpp)
+ament_auto_add_executable(subscriber src/subscriber.cpp)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
