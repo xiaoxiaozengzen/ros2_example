@@ -40,7 +40,7 @@ def parse_fmr(channel_id: int, data: memoryview, blf_file: can.io.BLFWriter, off
     count_offest += 4
     message_data_length = struct.unpack('<B', data[count_offest:count_offest + 1])[0]
     print("message_id: {:X}, mesage_channel: {}, message_dlc: {}, message_timestamp {}".format(
-        message_can_id, channel_id, message_data_length, message_timestamp / 1e9
+        message_can_id, channel_id, message_data_length, message_timestamp / 1e6
     ))
 
     count_offest += 1
@@ -56,7 +56,7 @@ def parse_fmr(channel_id: int, data: memoryview, blf_file: can.io.BLFWriter, off
     # data
 
     fmr_can_message = can.Message(
-        timestamp=message_timestamp / 1e9,  # Convert to seconds
+        timestamp=message_timestamp / 1e6,  # Convert to seconds
         arbitration_id=message_can_id,
         is_extended_id=False,
         is_remote_frame=False,
