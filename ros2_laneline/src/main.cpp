@@ -17,6 +17,15 @@
 #include "sensor_msgs/msg/image.hpp"
 #include "deva_perception_msgs/msg/lane_arrayv2.hpp"
 
+/**
+ * 一般对于车道线，会使用三次多项式来进行拟合，这样可以不用传输所有的点，只需要传输多项式的系数即可。
+ * 以y= ax^3 + bx^2 + cx + d为例，传输a,b,c,d四个系数即可。其中：
+ * - a: 三次项系数，表示曲线的曲率的变化率，a越大，曲线的弯曲程度变化越明显。
+ * - b: 二次项系数，表示曲线的曲率，b越大，曲线的弯曲程度越明显。
+ * - c: 一次项系数，表示曲线的斜率。c越大，曲线整体倾斜越陡。
+ * - d: 常数项，决定曲线在x=0时的截距，即曲线的上下平移量。例如在自车坐标系下，车道线距离自车位置的远近。
+ */
+
 class LaneLineNode : public rclcpp::Node {
   using LaneArrayV2 = deva_perception_msgs::msg::LaneArrayv2;
 public:
@@ -41,7 +50,7 @@ public:
                 Eigen::Vector4d point_rfu = ego2rfu_matrix4d_ * point_ego;
                 Eigen::Vector4d point_camera = rfu2camera_matrix4d_ * point_rfu;
                 Eigen::Vector3d point_pixel = camera2pixel_matrix3d_ * point_camera.head(3);
-                point_pixel /= point_pixel(2);
+                point_pixel /= point_pixel(2);  // 归一化
 
                 cv::Point2d point2d(point_pixel(0), point_pixel(1));
                 cv::circle(image, point2d, 5, cv::Scalar(0, 0, 255), -1);
