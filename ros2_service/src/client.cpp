@@ -37,19 +37,22 @@ public:
     if(send_request_thread_.joinable()) {
       send_request_thread_.join();
     }
+    if(get_parameters_thread_.joinable()) {
+      get_parameters_thread_.join();
+    }
   }
 
   void send_request() {
     while (!client_->wait_for_service(1s)) {
       if (!rclcpp::ok()) {
         RCLCPP_ERROR(rclcpp::get_logger("rclcpp"),
-                     "Interrupted while waiting for the service. Exiting.");
+                     "Interrupted while waiting for the add_two_ints service. Exiting.");
         return;
       }
       RCLCPP_INFO(rclcpp::get_logger("rclcpp"),
-                  "service not available, waiting again...");
+                  "add_two_ints service not available, waiting again...");
     }
-    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "service is available.");
+    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "add_two_ints service is available.");
 
     while(rclcpp::ok()) {
       static int count = 0;
@@ -60,24 +63,15 @@ public:
       request->b = std::rand() % 100;
 
       std::shared_future<devastator_perception_msgs::srv::SerCli::Response::SharedPtr> result = client_->async_send_request(request);
-      RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Sending request num %ld: Request a %ld, b %ld", count, request->a, request->b);
-
-      // // Wait for the result.
-      // if (rclcpp::spin_until_future_complete(node, result) ==
-      //     rclcpp::FutureReturnCode::SUCCESS) {
-      //   RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Sum: %ld", result.get()->sum);
-      // } else {
-      //   RCLCPP_ERROR(rclcpp::get_logger("rclcpp"),
-      //               "Failed to call service add_two_ints");
-      // }
+      RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "add_two_ints: Sending request num %ld: Request a %ld, b %ld", count, request->a, request->b);
 
       std::future_status status = result.wait_for(5s);
       if(status == std::future_status::ready) {
-        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Sum: %ld", result.get()->sum);
+        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "add_two_ints: Sum: %ld", result.get()->sum);
       } else if (status == std::future_status::timeout) {
-        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "service call timed out");
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "add_two_ints: service call timed out");
       } else {
-        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to call service add_two_ints");
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "add_two_ints: Failed to call service add_two_ints");
       }
 
       std::this_thread::sleep_for(2s);
