@@ -4,6 +4,10 @@
 #include <functional>
 #include <string>
 #include <fstream>
+#include <thread>
+#include <atomic>
+#include <deque>
+#include <iomanip>
 
 #include <opencv4/opencv2/core.hpp> // OpenCV核心功能
 #include <opencv4/opencv2/imgcodecs.hpp> // 图像编解码
@@ -16,6 +20,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "deva_perception_msgs/msg/lane_arrayv2.hpp"
+#include "foxglove_msgs/msg/compressed_video.hpp"
+#include "ros2_laneline/message_queue.hpp"
 
 /**
  * ros2中常用的坐标系有以下几种：
@@ -38,23 +44,88 @@
 
 class LaneLineNode : public rclcpp::Node {
   using LaneArrayV2 = deva_perception_msgs::msg::LaneArrayv2;
+  using CompressedVideo = foxglove_msgs::msg::CompressedVideo;
 public:
     LaneLineNode() : Node("lane_line_node") {
-        sub_ = this->create_subscription<LaneArrayV2>(
-            "/perception/lane_array_result", 10, std::bind(&LaneLineNode::Callback, this, std::placeholders::_1));
+        lane_sub_ = this->create_subscription<LaneArrayV2>(
+            "/perception/lane_array_result", 10, std::bind(&LaneLineNode::LaneCallback, this, std::placeholders::_1));
+
+        video_sub_ = this->create_subscription<CompressedVideo>(
+            "/sensor/cam_front_120/h265", 10, std::bind(&LaneLineNode::CompressedVideoCallback, this, std::placeholders::_1));
+
+        running_.store(true);
+        sync_thread_ = std::thread(&LaneLineNode::Sync, this);
     }
 
-    void Callback(const LaneArrayV2::SharedPtr msg) {
-        std::cerr << "=============== " << count_++ << " ===============" << std::endl;
-        std::stringstream ss;
-        ss << "header.sec: " << msg->header.stamp.sec
-           << ", header.nanosec: " << msg->header.stamp.nanosec
-           << ", header.frame id: " << msg->header.frame_id
-           << std::endl;
-        std::cerr << ss.str();
+    ~LaneLineNode() {
+        running_.store(false);
 
+        if(sync_thread_.joinable()) {
+            sync_thread_.join();
+        }
+
+        if(video_writer_.isOpened()) {
+            video_writer_.release();
+        }
+    }
+
+    void LaneCallback(const LaneArrayV2::SharedPtr msg) {
+        static double last_timestamp = 0.0;
+        double current_timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+        if(current_timestamp - last_timestamp < 0.05) {
+            return;
+        }
+        last_timestamp = current_timestamp;
+
+        // std::stringstream ss;
+        // ss << "-------LaneLine: ";
+        // ss << "header.sec: " << msg->header.stamp.sec
+        //    << ", header.nanosec: " << msg->header.stamp.nanosec
+        //    << ", header.frame id: " << msg->header.frame_id
+        //    << std::endl;
+        // std::cerr << ss.str();
+        {
+            std::lock_guard<std::mutex> lock(lane_mutex_);
+            if(lane_queue_.size() >= max_queue_size_) {
+                lane_queue_.pop_front();
+            }
+
+            lane_queue_.push_back(*msg.get());
+        }
+        
+    }
+
+    void CompressedVideoCallback(const CompressedVideo::SharedPtr msg) {
+        static double last_timestamp = 0.0;
+        double current_timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+        if(current_timestamp - last_timestamp < 0.05) {
+            return;
+        }
+        last_timestamp = current_timestamp;
+
+        // std::stringstream ss;
+        // ss << "------Camera120Front: ";
+        // ss << "header.sec: " << msg->header.stamp.sec
+        //    << ", header.nanosec: " << msg->header.stamp.nanosec
+        //    << ", header.frame id: " << msg->header.frame_id
+        //    << std::endl;
+        // std::cerr << ss.str();
+        {
+            std::lock_guard<std::mutex> lock(video_mutex_);
+            if(video_queue_.size() >= max_queue_size_) {
+                video_queue_.pop_front();
+            }
+
+            video_queue_.push_back(*msg.get());
+
+            video_msg_queue_.enqueue(*msg.get());
+        }
+    }
+
+    void Print(const CompressedVideo& video_msg, const LaneArrayV2& lane_msg) {
+        std::cout << "======Synchronized Msgs======" << count_ << std::endl;
         cv::Mat image = cv::Mat::ones(2160, 3840, CV_8UC3);
-        for(auto lane : msg->lane_array) {
+        for(auto lane : lane_msg.lane_array) {
             for(auto point : lane.waypoints) {
                 Eigen::Vector4d point_ego(point.x, point.y, point.z, 1);
                 Eigen::Vector4d point_rfu = ego2rfu_matrix4d_ * point_ego;
@@ -67,16 +138,108 @@ public:
             }
         }
 
+        count_++;
         std::string frame_num = "frame " + std::to_string(count_);
         cv::putText(image, frame_num, cv::Point(50, 50), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 0, 255), 2);
         
-        if(count_ < 200) {
-          video_writer_.write(image);
+        video_writer_.write(image);
+    }
+
+    bool SyncLane(double match_time, LaneArrayV2& lane_msg) {
+        std::lock_guard<std::mutex> lock2(lane_mutex_);
+        if(lane_queue_.empty()) {
+            std::cerr << "Lane queue is empty." << std::endl;
+            return false;
         }
 
-        if(count_ == 200) {
-          video_writer_.release();
-          std::cerr << "Video saved." << std::endl;
+        std::deque<LaneArrayV2>::iterator iter = std::upper_bound(
+            lane_queue_.begin(), lane_queue_.end(), match_time,
+            [](double timestamp, const LaneArrayV2& lane_msg) {
+                double lane_timestamp = lane_msg.header.stamp.sec + lane_msg.header.stamp.nanosec * 1e-9;
+                return timestamp < lane_timestamp;
+            });
+
+        if(iter == lane_queue_.end()) {
+            std::deque<LaneArrayV2>::iterator prev_iter = std::prev(iter);
+            double video_time = match_time;
+            double lane_time = prev_iter->header.stamp.sec + prev_iter->header.stamp.nanosec * 1e-9;
+            double time_diff = std::abs(lane_time - video_time);
+
+            if(time_diff < 0.3) {
+                lane_msg = *prev_iter;
+                lane_queue_.erase(lane_queue_.begin(), std::next(prev_iter));
+                return true;
+            } else {
+                std::cerr <<  __LINE__ << ", No matching Lane msg found. video time " 
+                            << std::to_string(video_time)
+                            << ", lane time " << std::to_string(lane_time)
+                            << std::endl;
+                return false;
+            }
+        }
+
+        if(iter == lane_queue_.begin()) {
+            std::cerr << "No matching Lane msg found. " << __LINE__ << std::endl;
+            return false;
+        }
+
+        if(lane_queue_.size() < 2) {
+            std::cerr << "Not enough Lane msgs in queue." << std::endl;
+            return false;
+        }
+
+        std::deque<LaneArrayV2>::iterator prev_iter = std::prev(iter);
+        double video_time = match_time;
+        double lane_time = prev_iter->header.stamp.sec + prev_iter->header.stamp.nanosec * 1e-9;
+        double time_diff = std::abs(lane_time - video_time);
+
+        if(time_diff < 0.3) {
+            lane_msg = *prev_iter;
+            lane_queue_.erase(lane_queue_.begin(), std::next(prev_iter));
+            return true;
+        } else {
+                std::cerr <<  __LINE__ << ", No matching Lane msg found. video time " 
+                            << std::to_string(video_time)
+                            << ", lane time " << std::to_string(lane_time)
+                            << std::endl;
+            return false;
+        }
+
+        return false;
+    }
+
+    void Sync() {
+        while (running_.load()) {
+            LaneArrayV2 lane_msg;
+            bool lane_available = false;
+            CompressedVideo video_msg;
+            bool video_available = false;
+
+            std::cerr << "Syncing..." << std::endl;
+
+            {
+                bool got_video = video_msg_queue_.dequeue(video_msg, std::chrono::milliseconds(100));
+                if(!got_video) {
+                    continue;
+                }
+                video_available = true;
+            }
+            
+            {
+                lane_available = SyncLane(
+                    video_msg.header.stamp.sec + video_msg.header.stamp.nanosec * 1e-9, lane_msg); 
+            }
+
+
+            if(lane_available && video_available) {
+                double video_time = video_msg.header.stamp.sec + video_msg.header.stamp.nanosec * 1e-9;
+                double lane_time = lane_msg.header.stamp.sec + lane_msg.header.stamp.nanosec * 1e-9;
+                std::cerr << "-------Synchronized msgs at time: video " 
+                          << std::to_string(video_time)
+                          << ", lane " << std::to_string(lane_time)
+                          << std::endl;
+                Print(video_msg, lane_msg);
+            }
         }
     }
 
@@ -110,26 +273,15 @@ public:
       std::cout << "ego2rfu_matrix4d: " << std::endl << ego2rfu_matrix4d_ << std::endl;
 
       // rfu2camera
-      std::string camera_name = "cam_front_30";
-      std::string rfu2camera_file = calibration_path_ + "/camera_params/" + camera_name + "_extrinsic.json";
-      std::ifstream ifs_rfu2camera(rfu2camera_file);
-      if (!ifs_rfu2camera.is_open()) {
-          std::cerr << "Failed to open file: " << rfu2camera_file << std::endl;
-          return -1;
-      }
-      std::stringstream ss_rfu2camera;
-      ss_rfu2camera << ifs_rfu2camera.rdbuf();
-      std::string json_str_rfu2camera = ss_rfu2camera.str();
-      nlohmann::json json_data_rfu2camera = nlohmann::json::parse(json_str_rfu2camera);
       std::array<double, 3> translation_rfu2camera;
       std::array<double, 4> rotation_rfu2camera;
-      translation_rfu2camera[0] = json_data_rfu2camera.at("transform").at("translation").at("x");
-      translation_rfu2camera[1] = json_data_rfu2camera.at("transform").at("translation").at("y");
-      translation_rfu2camera[2] = json_data_rfu2camera.at("transform").at("translation").at("z");
-      rotation_rfu2camera[0] = json_data_rfu2camera.at("transform").at("rotation").at("w");
-      rotation_rfu2camera[1] = json_data_rfu2camera.at("transform").at("rotation").at("x");
-      rotation_rfu2camera[2] = json_data_rfu2camera.at("transform").at("rotation").at("y");
-      rotation_rfu2camera[3] = json_data_rfu2camera.at("transform").at("rotation").at("z");
+      translation_rfu2camera[0] = 0.02120796734209838;
+      translation_rfu2camera[1] = 1.5566029441557836;
+      translation_rfu2camera[2] = -2.0829265465698885;
+      rotation_rfu2camera[0] = 0.7044463824383106;
+      rotation_rfu2camera[1] = 0.7097165737575503;
+      rotation_rfu2camera[2] = -0.006408297327490251;
+      rotation_rfu2camera[3] = -0.004075896071251731;
       Eigen::Vector3d translation_eigen_rfu2camera(translation_rfu2camera[0], translation_rfu2camera[1], translation_rfu2camera[2]);
       Eigen::Translation3d translation_matrix_rfu2camera(translation_eigen_rfu2camera);
       Eigen::Quaterniond rotation_eigen_rfu2camera(rotation_rfu2camera[0], rotation_rfu2camera[1], rotation_rfu2camera[2], rotation_rfu2camera[3]);
@@ -139,20 +291,10 @@ public:
       std::cout << "rfu2camera_matrix4d: " << std::endl << rfu2camera_matrix4d << std::endl;
 
       // camera2pixel
-      std::string camera2pixel_file = calibration_path_ + "/camera_params/" + camera_name + "_intrinsic.json";
-      std::ifstream ifs_camera2pixel(camera2pixel_file);
-      if (!ifs_camera2pixel.is_open()) {
-          std::cerr << "Failed to open file: " << camera2pixel_file << std::endl;
-          return -1;
-      }
-      std::stringstream ss_camera2pixel;
-      ss_camera2pixel << ifs_camera2pixel.rdbuf();
-      std::string json_str_camera2pixel = ss_camera2pixel.str();
-      nlohmann::json json_data_camera2pixel = nlohmann::json::parse(json_str_camera2pixel);
-      double fx = json_data_camera2pixel["K"][0][0];
-      double fy = json_data_camera2pixel["K"][1][1];
-      double cx = json_data_camera2pixel["K"][0][2];
-      double cy = json_data_camera2pixel["K"][1][2];
+      double fx = 7314.1068504287596;
+      double fy = 7310.9106790563401;
+      double cx = 1912.5121782628;
+      double cy = 1066.95209113283;
       Eigen::Matrix3d camera2pixel_matrix3d;
       camera2pixel_matrix3d << fx, 0, cx,
                                0, fy, cy,
@@ -170,7 +312,6 @@ public:
     }
 
 private:
-    rclcpp::Subscription<LaneArrayV2>::SharedPtr sub_;
     std::uint64_t count_ = 0;
     std::string video_file_ = "/mnt/workspace/cgz_workspace/Exercise/ros2_example/ros2_laneline/output/output_1.avi";
     std::string calibration_path_ = "/mnt/workspace/cgz_workspace/Exercise/eigen_example/calibration";
@@ -180,6 +321,19 @@ private:
     Eigen::Matrix3d camera2pixel_matrix3d_;
 
     cv::VideoWriter video_writer_;
+
+    rclcpp::Subscription<LaneArrayV2>::SharedPtr lane_sub_;
+    rclcpp::Subscription<CompressedVideo>::SharedPtr video_sub_;
+    std::deque<LaneArrayV2> lane_queue_;
+    std::mutex lane_mutex_;
+    std::deque<CompressedVideo> video_queue_;
+    std::mutex video_mutex_;
+    std::uint16_t max_queue_size_ = 500;
+
+    BoundedBlockingQueue<CompressedVideo> video_msg_queue_{2};
+
+    std::atomic<bool> running_{false};
+    std::thread sync_thread_;
 };
 
 int main(int argc, char** argv) {

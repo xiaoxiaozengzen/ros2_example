@@ -1,0 +1,1 @@
+geometry_msgs/Point[] waypoints #4*空白区域，1*延长交点

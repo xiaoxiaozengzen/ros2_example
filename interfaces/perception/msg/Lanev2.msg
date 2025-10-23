@@ -36,6 +36,11 @@ uint8 DOUBLE_SOLID_DOTTED_WHITE = 11
 uint8 STOPLINE = 12
 uint8 ROADEDGELANE = 13
 uint8 DOUBLEROADEDGELANE = 14
+uint8 DIVERSIONLINE = 15         # 0x15: 导流线                                                                                                                                                           
+uint8 JUNCTION_GUIDING_LINE = 16                                                                                                                                                                          
+uint8 LEFT_TURN_WAITING_ZONE = 17                                                                                                                                                                         
+uint8 SERRATED_LINE = 18                                                                                                                                                                                  
+uint8 HERRING_PATTERN = 19
 uint8 lane_property
 LanePropertySegment lane_property_segment
 

@@ -1,0 +1,4 @@
+uint8 id                                                                                                                                                                                                  
+uint8 center_line_property                                                                                                                                                                                
+geometry_msgs/Point[] waypoints                                                                                                                                                                           
+geometry_msgs/Point bev_fork_point

@@ -26,3 +26,7 @@ uint8 FORBID_THROUGH_LEFT = 17
 uint8 FORBID_RIGHT = 18
 uint8 MERGE_LEFT = 19
 uint8 MERGE_RIGHT = 20
+uint8 FORBID_LEFT_TURN = 21                                                                                                                                                                               
+uint8 NONMOTOR_LANE = 22 #非机动车道框                                                                                                                                                                    
+uint8 BUS_LANE = 23 #公交车道框                                                                                                                                                                           
+uint8 REVERSIBLE_LANE = 24#潮汐车道框
