@@ -19,12 +19,9 @@ endif()
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
-find_package(OpenCV REQUIRED)
-
 file(GLOB_RECURSE ROS2_LANELINE_SRCS "src/*.cpp")
 ament_auto_add_executable(${PROJECT_NAME}_exe ${ROS2_LANELINE_SRCS})
-target_include_directories(${PROJECT_NAME}_exe PUBLIC ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME}_exe ${OpenCV_LIBRARIES})
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights

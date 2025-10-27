@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(ros2bag_example)
+project(db3_example)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -23,10 +23,8 @@ ament_auto_find_build_dependencies()
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
-ament_auto_add_executable(bag_recorder_exe ${CMAKE_SOURCE_DIR}/src/bag_recorder.cpp)
-ament_auto_add_executable(data_generate_exe ${CMAKE_SOURCE_DIR}/src/data_generate.cpp)
-ament_auto_add_executable(meta_data_exe ${CMAKE_SOURCE_DIR}/src/meta_data.cpp)
-ament_auto_add_executable(reader_exe ${CMAKE_SOURCE_DIR}/src/reader.cpp)
-ament_auto_add_executable(player_exe ${CMAKE_SOURCE_DIR}/src/player.cpp)
+file(GLOB_RECURSE SRCS ${PROJECT_SOURCE_DIR}/src/*.cpp)
+
+ament_auto_add_executable(${PROJECT_NAME}_exe ${SRCS})
 
 ament_auto_package()

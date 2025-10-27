@@ -9,6 +9,15 @@
 #include <deque>
 #include <iomanip>
 
+extern "C" {
+#include "libavformat/avformat.h"
+#include "libavcodec/avcodec.h"
+#include "libavutil/pixfmt.h"
+#include "libavutil/avutil.h"
+#include "libavutil/pixdesc.h"
+#include "libavutil/opt.h"
+}
+
 #include <opencv4/opencv2/core.hpp> // OpenCV核心功能
 #include <opencv4/opencv2/imgcodecs.hpp> // 图像编解码
 #include <opencv4/opencv2/highgui.hpp> // GUI
@@ -47,14 +56,7 @@ class LaneLineNode : public rclcpp::Node {
   using CompressedVideo = foxglove_msgs::msg::CompressedVideo;
 public:
     LaneLineNode() : Node("lane_line_node") {
-        lane_sub_ = this->create_subscription<LaneArrayV2>(
-            "/perception/lane_array_result", 10, std::bind(&LaneLineNode::LaneCallback, this, std::placeholders::_1));
 
-        video_sub_ = this->create_subscription<CompressedVideo>(
-            "/sensor/cam_front_120/h265", 10, std::bind(&LaneLineNode::CompressedVideoCallback, this, std::placeholders::_1));
-
-        running_.store(true);
-        sync_thread_ = std::thread(&LaneLineNode::Sync, this);
     }
 
     ~LaneLineNode() {
@@ -67,6 +69,78 @@ public:
         if(video_writer_.isOpened()) {
             video_writer_.release();
         }
+
+        if(packet) {
+            av_packet_free(&packet);
+            packet = nullptr;
+        }
+
+        if(frame) {
+            av_frame_free(&frame);
+            frame = nullptr;
+        }
+
+        if(codec_context) {
+            avcodec_free_context(&codec_context);
+            codec_context = nullptr;
+        }
+
+        if(format_context) {
+            avformat_free_context(format_context);
+            format_context = nullptr;
+        }
+    }
+
+    bool Init() {
+        int get_matrix_result = GetMatrix();
+        if(get_matrix_result != 0) {
+            std::cerr << "Failed to get matrix." << std::endl;
+            return false;
+        }
+
+        lane_sub_ = this->create_subscription<LaneArrayV2>(
+            "/perception/lane_array_result", 10, std::bind(&LaneLineNode::LaneCallback, this, std::placeholders::_1));
+
+        video_sub_ = this->create_subscription<CompressedVideo>(
+            "/sensor/cam_front_120/h265", 10, std::bind(&LaneLineNode::CompressedVideoCallback, this, std::placeholders::_1));
+
+        format_context = avformat_alloc_context();
+        if(format_context == nullptr) {
+            std::cerr << "Could not allocate format context." << std::endl;
+            return false;
+        }
+
+        codec_context = avcodec_alloc_context3(nullptr);
+        if(codec_context == nullptr) {
+            std::cerr << "Could not allocate codec context." << std::endl;
+            return false;
+        }
+        codec_context->codec_type = AVMEDIA_TYPE_VIDEO;
+        codec_context->codec_id = AV_CODEC_ID_H265;
+
+        AVCodec *codec = avcodec_find_decoder(codec_context->codec_id);
+        if(codec == nullptr) {
+            std::cerr << "Could not find decoder for codec id " << codec_context->codec_id << std::endl;
+            return false;
+        }
+
+        int ret = avcodec_open2(codec_context, codec, nullptr);
+        if(ret < 0) {
+            std::cerr << "Could not open codec." << std::endl;
+            return false;
+        }
+
+        packet = av_packet_alloc();
+        frame = av_frame_alloc();
+        if(packet == nullptr || frame == nullptr) {
+            std::cerr << "Could not allocate packet or frame." << std::endl;
+            return false;
+        }
+
+        running_.store(true);
+        sync_thread_ = std::thread(&LaneLineNode::Sync, this);
+
+        return true;
     }
 
     void LaneCallback(const LaneArrayV2::SharedPtr msg) {
@@ -77,13 +151,6 @@ public:
         }
         last_timestamp = current_timestamp;
 
-        // std::stringstream ss;
-        // ss << "-------LaneLine: ";
-        // ss << "header.sec: " << msg->header.stamp.sec
-        //    << ", header.nanosec: " << msg->header.stamp.nanosec
-        //    << ", header.frame id: " << msg->header.frame_id
-        //    << std::endl;
-        // std::cerr << ss.str();
         {
             std::lock_guard<std::mutex> lock(lane_mutex_);
             if(lane_queue_.size() >= max_queue_size_) {
@@ -103,13 +170,6 @@ public:
         }
         last_timestamp = current_timestamp;
 
-        // std::stringstream ss;
-        // ss << "------Camera120Front: ";
-        // ss << "header.sec: " << msg->header.stamp.sec
-        //    << ", header.nanosec: " << msg->header.stamp.nanosec
-        //    << ", header.frame id: " << msg->header.frame_id
-        //    << std::endl;
-        // std::cerr << ss.str();
         {
             std::lock_guard<std::mutex> lock(video_mutex_);
             if(video_queue_.size() >= max_queue_size_) {
@@ -117,14 +177,75 @@ public:
             }
 
             video_queue_.push_back(*msg.get());
-
-            video_msg_queue_.enqueue(*msg.get());
         }
+
+        video_msg_queue_.enqueue(*msg.get());
+    }
+
+    void DecodeImage(const CompressedVideo& video_msg, cv::Mat& image) {
+        size_t data_size = video_msg.data.size();
+        std::vector<uint8_t> data(data_size);
+        memcpy(data.data(), video_msg.data.data(), data_size);
+        for(int i = 0; i < 8; ++i) {
+            printf("%02x ", data[i]);
+        }
+        printf("\n");
+
+        // int ret = av_new_packet(packet, data_size);
+        // if(ret < 0) {
+        //     std::cerr << "Could not allocate packet." << std::endl;
+        //     return;
+        // }
+
+        // memcpy(packet->data, data.data(), data_size);
+        // packet->size = data_size;
+        // packet->pts = count_;
+        // packet->duration = 1;
+        // AVRational src_tb = AVRational{1, 10}; // 假设原始时间基是毫秒
+        // AVRational dst_tb = codec_context && codec_context->time_base.num != 0 ? codec_context->time_base : AVRational{1,1000};
+        // av_packet_rescale_ts(packet, src_tb, dst_tb);
+
+        // ret = avcodec_send_packet(codec_context, packet);
+        // if(ret < 0) {
+        //     std::cerr << "Could not send packet." << std::endl;
+        //     return;
+        // }
+
+        // av_packet_unref(packet);
+
+        // while(true) {
+        //     ret = avcodec_receive_frame(codec_context, frame);
+        //     if(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+        //         break;
+        //     } else if(ret < 0) {
+        //         std::cerr << "Could not receive frame." << std::endl;
+        //         break;
+        //     }
+
+        //     std::cout << "Decoded frame: " << frame->width << "x" << frame->height << ", format: " 
+        //               << av_get_pix_fmt_name(static_cast<AVPixelFormat>(frame->format)) << std::endl;
+
+        //     // // Convert AVFrame to cv::Mat
+        //     // cv::Mat temp_frame(frame->height, frame->width, CV_8UC3);
+        //     // for(int y = 0; y < frame->height; y++) {
+        //     //     for(int x = 0; x < frame->width; x++) {
+        //     //         temp_frame.at<cv::Vec3b>(y, x)[0] = frame->data[0][y * frame->linesize[0] + x * 3 + 0]; // B
+        //     //         temp_frame.at<cv::Vec3b>(y, x)[1] = frame->data[0][y * frame->linesize[0] + x * 3 + 1]; // G
+        //     //         temp_frame.at<cv::Vec3b>(y, x)[2] = frame->data[0][y * frame->linesize[0] + x * 3 + 2]; // R
+        //     //     }
+        //     // }
+
+        //     // image = temp_frame.clone();
+
+        //     av_frame_unref(frame);
+        // }
     }
 
     void Print(const CompressedVideo& video_msg, const LaneArrayV2& lane_msg) {
-        std::cout << "======Synchronized Msgs======" << count_ << std::endl;
         cv::Mat image = cv::Mat::ones(2160, 3840, CV_8UC3);
+
+        DecodeImage(video_msg, image);
+
         for(auto lane : lane_msg.lane_array) {
             for(auto point : lane.waypoints) {
                 Eigen::Vector4d point_ego(point.x, point.y, point.z, 1);
@@ -215,8 +336,6 @@ public:
             CompressedVideo video_msg;
             bool video_available = false;
 
-            std::cerr << "Syncing..." << std::endl;
-
             {
                 bool got_video = video_msg_queue_.dequeue(video_msg, std::chrono::milliseconds(100));
                 if(!got_video) {
@@ -234,7 +353,8 @@ public:
             if(lane_available && video_available) {
                 double video_time = video_msg.header.stamp.sec + video_msg.header.stamp.nanosec * 1e-9;
                 double lane_time = lane_msg.header.stamp.sec + lane_msg.header.stamp.nanosec * 1e-9;
-                std::cerr << "-------Synchronized msgs at time: video " 
+                std::cerr << "-------Synchronized msgs at " << count_
+                          << " num, time: video " 
                           << std::to_string(video_time)
                           << ", lane " << std::to_string(lane_time)
                           << std::endl;
@@ -313,7 +433,7 @@ public:
 
 private:
     std::uint64_t count_ = 0;
-    std::string video_file_ = "/mnt/workspace/cgz_workspace/Exercise/ros2_example/ros2_laneline/output/output_1.avi";
+    std::string video_file_ = "/mnt/workspace/cgz_workspace/Exercise/ros2_example/ros2_laneline/output/output_just_laneline.avi";
     std::string calibration_path_ = "/mnt/workspace/cgz_workspace/Exercise/eigen_example/calibration";
 
     Eigen::Matrix4d ego2rfu_matrix4d_;
@@ -334,14 +454,20 @@ private:
 
     std::atomic<bool> running_{false};
     std::thread sync_thread_;
+
+    AVFormatContext *format_context = nullptr;
+    AVCodecContext *codec_context = nullptr;
+    AVCodec* decoder = nullptr;
+    AVPacket* packet = nullptr;
+    AVFrame* frame = nullptr;
 };
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<LaneLineNode>();
-    int ret = node->GetMatrix();
-    if(ret != 0) {
-        std::cerr << "Failed to get matrix." << std::endl;
+    bool ret = node->Init();
+    if(!ret) {
+        std::cerr << "Failed to initialize node." << std::endl;
         return -1;
     }
     rclcpp::spin(node);

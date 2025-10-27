@@ -32,13 +32,16 @@ class ZetaConan(ConanFile):
         self.options["opencv"].with_gtk = False
         self.options["opencv"].with_jpeg = "libjpeg-turbo"
         self.options["opencv"].text = False
-        self.requires("eigen/3.4.0")
-        self.requires("nlohmann_json/3.11.2")
 
     def build_requirements(self):
         pass
 
     def requirements(self):
+        self.requires("eigen/3.4.0")
+        self.requires("nlohmann_json/3.11.2")
+        self.requires("libpng/1.6.44")
+        self.requires("zlib/1.2.13")
+        self.requires("ffmpeg/4.3.2")
         self.requires("opencv/4.5.5@transformer/stable")
 
 

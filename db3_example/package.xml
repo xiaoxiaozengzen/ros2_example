@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>ros2bag_example</name>
+  <name>db3_example</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
   <maintainer email="yanduochao@megvii.com">megvii</maintainer>
@@ -14,7 +14,7 @@
   <depend>rosbag2_storage</depend>
   <depend>rcutils</depend>
   <depend>ament_index_cpp</depend>
-  <depend>e171_msgs</depend>
+  <depend>devastator_perception_msgs</depend>
   <depend>Eigen3</depend>
   <depend>yaml_cpp_vendor</depend>
 
