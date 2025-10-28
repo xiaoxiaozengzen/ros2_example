@@ -1,18 +1,3 @@
-// Copyright 2021, Open Source Robotics Foundation, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
 #include <example_interfaces/msg/int32.hpp>
@@ -29,36 +14,45 @@
 #include <chrono>
 #include <memory>
 #include <fstream>
+#include <thread>
 
-#include "e171_msgs/msg/e171.hpp"
-#include "e171_msgs/msg/e171.h"
+#include "devastator_perception_msgs/msg/my_test.hpp"
+#include "devastator_perception_msgs/msg/my_test.h"
 
 using namespace std::chrono_literals;
 
-static const std::string topic_name = "/my/e171";
+static const std::string topic_name = "/my/test";
 
-class MetaData : public rclcpp::Node
+class McapFileReaderNode : public rclcpp::Node
 {
 public:
-  explicit MetaData(std::string path) 
-  : Node("data_generator"),
+  explicit McapFileReaderNode(std::string path) 
+  : Node("mcap_file_reader_node"),
   path_(path)
   {
     reader_ = std::make_unique<rosbag2_cpp::readers::SequentialReader>();
 
     thread_ = std::thread([this]() {
+      std::this_thread::sleep_for(500ms);
       Work();
     });
   }
 
-  ~MetaData() {
-    thread_.join();
+  ~McapFileReaderNode() {
+    if(thread_.joinable()) {
+      thread_.join();
+    }
   }
 
   void Work() {
-    // 改部分代码会自动搜索metadata.yaml文件
-    // rosbag2_storage::MetadataIo metadata_io;
-    // auto bag_meta_data = metadata_io.read_metadata(path_);
+    try {
+      // 改部分代码会自动搜索metadata.yaml文件，找不到会报错
+      rosbag2_storage::MetadataIo metadata_io;
+      auto ros2bag_meta_data = metadata_io.read_metadata(path_);
+      std::cout << "Read metadata.yaml successfully!" << std::endl;
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(this->get_logger(), "Exception : %s", e.what());
+    }
 
     const rosbag2_cpp::StorageOptions storage_options({path_, "mcap"});
     const rosbag2_cpp::ConverterOptions converter_options(
@@ -72,11 +66,14 @@ public:
 
     reader_->open(storage_options, converter_options);
 
+#if 0
     // 白名单，只有在白名单中的topic才会被读取。如果不设置白名单，则所有的topic都会被读取
-    // rosbag2_storage::StorageFilter storage_filter;
-    // storage_filter.topics.push_back("/front_4d_radar_data");
-    // reader_->set_filter(storage_filter);
+    rosbag2_storage::StorageFilter storage_filter;
+    storage_filter.topics.push_back("/front_4d_radar_data");
+    reader_->set_filter(storage_filter);
+#endif
 
+    // 需要保证存在metadata.yaml文件，否则会报错
     rosbag2_storage::BagMetadata bag_meta_data = reader_->get_metadata();
     std::cout << "version: " << bag_meta_data.version << std::endl;
     std::cout << "bag_size: " << bag_meta_data.bag_size << std::endl; //文件大小
@@ -85,7 +82,8 @@ public:
       std::cout << "relative_file_paths: " << entry << std::endl;
     }
     std::cout << "duration: " << std::chrono::duration_cast<std::chrono::seconds>(bag_meta_data.duration).count() << std::endl;
-    std::cout << "starting_time: " << std::chrono::duration_cast<std::chrono::seconds>(bag_meta_data.starting_time.time_since_epoch()).count() << std::endl;
+    std::cout << "starting_time(s): " << std::chrono::duration_cast<std::chrono::seconds>(bag_meta_data.starting_time.time_since_epoch()).count() << std::endl;
+    std::cout << "starting_time(ns): " << std::chrono::duration_cast<std::chrono::nanoseconds>(bag_meta_data.starting_time.time_since_epoch()).count() << std::endl;
     std::cout << "message_count: " << bag_meta_data.message_count << std::endl;
     for (const rosbag2_storage::TopicInformation& entry : bag_meta_data.topics_with_message_count) {
       rosbag2_storage::TopicMetadata topic_metadata = entry.topic_metadata;
@@ -108,18 +106,18 @@ public:
       std::cout << "get topic name: " << entry.name << " type: " << entry.type << std::endl;
     }
 
-    e171_msgs::msg::E171 e171_msg;
+    devastator_perception_msgs::msg::MyTest test_msg;
     auto ros_message = std::make_shared<rosbag2_cpp::rosbag2_introspection_message_t>();
     ros_message->time_stamp = 0;
     ros_message->message = nullptr;
     ros_message->allocator = rcutils_get_default_allocator();
-    ros_message->message = &e171_msg;
+    ros_message->message = &test_msg;
 
     auto library = rosbag2_cpp::get_typesupport_library(
-      "e171_msgs/msg/E171", "rosidl_typesupport_cpp");
-    
+      "devastator_perception_msgs/msg/MyTest", "rosidl_typesupport_cpp");
+
     auto type_support = rosbag2_cpp::get_typesupport_handle(
-      "e171_msgs/msg/E171", "rosidl_typesupport_cpp", library);
+      "devastator_perception_msgs/msg/MyTest", "rosidl_typesupport_cpp", library);
 
     rosbag2_cpp::SerializationFormatConverterFactory factory;
     std::unique_ptr<rosbag2_cpp::converter_interfaces::SerializationFormatDeserializer> cdr_deserializer_;
@@ -148,14 +146,8 @@ public:
 
           cdr_deserializer_->deserialize(message, type_support, ros_message);
 
-          std::string str;
-          for (auto & data : e171_msg.data) {
-            str += std::to_string(data) + " ";
-          }
-          std::cerr << "e171_msg.header.stamp.sec: " << e171_msg.header.stamp.sec
-                    << ", e171_msg.header.stamp.nanosec: " << e171_msg.header.stamp.nanosec
-                    << ", e171_msg.header.frame_id: " << e171_msg.header.frame_id
-                    << ", e171_msg.data: " << str
+          std::cerr << "test_msg.a: " << static_cast<int>(test_msg.a)
+                    << ", test_msg.b: " << static_cast<int>(test_msg.b)
                     << std::endl;
       } else {
         // std::cout << "------------- parse :" << message->topic_name << std::endl;
@@ -185,7 +177,7 @@ int main(int argc, char * argv[])
   }
 
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<MetaData>(path));
+  rclcpp::spin(std::make_shared<McapFileReaderNode>(path));
   rclcpp::shutdown();
   return 0;
 }

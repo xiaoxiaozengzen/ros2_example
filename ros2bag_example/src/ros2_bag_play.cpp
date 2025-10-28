@@ -1,18 +1,3 @@
-// Copyright 2021, Open Source Robotics Foundation, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
 #include <example_interfaces/msg/int32.hpp>
@@ -28,7 +13,6 @@
 #include "moodycamel/readerwriterqueue.h"
 #include "rclcpp/qos.hpp"
 #include "rosbag2_transport/play_options.hpp"
-// #include "replayable_message.hpp"
 
 #include <chrono>
 #include <memory>
@@ -42,7 +26,7 @@
 #include <string>
 #include <vector>
 
-#include "e171_msgs/msg/e171.hpp"
+#include "devastator_perception_msgs/msg/my_test.hpp"
 
 class Stat {
 public:
@@ -64,8 +48,7 @@ private:
   size_t window_size_ = 50;
   float sum_ = 0;
   std::deque<float> q_;
-  std::chrono::steady_clock::time_point last_ =
-      std::chrono::steady_clock::now();
+  std::chrono::steady_clock::time_point last_ = std::chrono::steady_clock::now();
 };
 
 struct PlayOptions
@@ -97,13 +80,13 @@ class Player : public rclcpp::Node
 public:
     using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 public:
-    explicit Player()
-    :Node("player")
-    {
-        std::string path = "/home/user/cgz_workspace/Bag/rosbag2_2024_01_28-15_56_33";
+    explicit Player(std::string path)
+    :Node("ros2_bag_play"),
+        bag_path_(path)
+    {        
         std::unique_ptr<rosbag2_cpp::readers::SequentialReader> reader;
         reader = std::make_unique<rosbag2_cpp::readers::SequentialReader>();
-        const rosbag2_cpp::StorageOptions storage_options({path, "mcap"});
+        const rosbag2_cpp::StorageOptions storage_options({bag_path_, "mcap"});
         const rosbag2_cpp::ConverterOptions converter_options(
         {rmw_get_serialization_format(),
             rmw_get_serialization_format()});
@@ -113,7 +96,8 @@ public:
 
         PlayOptions options;
         options.read_ahead_queue_size = 100;
-        options.topics_to_filter.push_back("/front_4d_radar_data");
+        options.topics_to_filter.push_back("/my/test");
+        
         play_th_ = std::thread(&Player::play, this, options);
     }
 
@@ -130,6 +114,7 @@ public:
             std::cerr << "print_message_callback_ is null" << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
+        
         // topic_qos_profile_overrides_ = options.topic_qos_profile_overrides;
         prepare_publishers(options);
 
@@ -190,6 +175,7 @@ public:
             message_queue_.enqueue(message);
         }
     }
+
     void wait_for_filled_queue(const PlayOptions & options) const
     {
         while (
@@ -199,6 +185,7 @@ public:
             std::this_thread::sleep_for(queue_read_wait_period_);
         }
     }
+
     void play_messages_from_queue(const PlayOptions & options)
     {
         start_time_ = std::chrono::system_clock::now();
@@ -211,6 +198,7 @@ public:
             }
         } while (!is_storage_completely_loaded() && rclcpp::ok());
     }
+
     void play_messages_until_queue_empty(const PlayOptions & options)
     {
         ReplayableMessage message;
@@ -230,12 +218,14 @@ public:
             }
         }
     }
+
     void prepare_publishers(const PlayOptions & options)
     {
         rosbag2_storage::StorageFilter storage_filter;
         storage_filter.topics = options.topics_to_filter;
         reader_->set_filter(storage_filter);
     }
+
     void register_call(const std::function<void(const std::shared_ptr<rosbag2_storage::SerializedBagMessage>& message)> & callback)
     {
         std::cout << "register_call" << std::endl;
@@ -255,36 +245,33 @@ private:
 
   std::function<void(const std::shared_ptr<rosbag2_storage::SerializedBagMessage>& message)> print_message_callback_;
   std::thread play_th_;
+
+  std::string bag_path_;
 };
 
 const std::chrono::milliseconds Player::queue_read_wait_period_ = std::chrono::milliseconds(100);
 
 
-
 int main(int argc, char * argv[])
 {
-    Stat radar_stat;
+    if(argc < 2) {
+        std::cerr << "Usage: ros2_bag_play <bag_path>" << std::endl;
+        return -1;
+    }
+    std::string bag_path = argv[1];
 
-    auto fun = [&radar_stat](const std::shared_ptr<rosbag2_storage::SerializedBagMessage>& message) {
-        std::cout << "radar_frequency: " << radar_stat.update() << ", buffer_length: " << message->serialized_data->buffer_length << std::endl;
+    Stat message_frequency;
+
+    auto fun = [&message_frequency](const std::shared_ptr<rosbag2_storage::SerializedBagMessage>& message) {
+        std::cout << "message_frequency: " << message_frequency.update() << ", buffer_length: " << message->serialized_data->buffer_length << std::endl;
     };
 
     rclcpp::init(argc, argv);
-    auto player = std::make_shared<Player>();
-
-    std::thread work(
-        [&]() {
-            rclcpp::spin(player);
-            rclcpp::shutdown();
-        }
-    );
-
-    std::this_thread::sleep_for(std::chrono::seconds(10));
-    
-    
+    auto player = std::make_shared<Player>(bag_path);
     player->register_call(fun);
-    work.join();
-    
+
+    rclcpp::spin(player);
+    rclcpp::shutdown();
 
     return 0;
 }

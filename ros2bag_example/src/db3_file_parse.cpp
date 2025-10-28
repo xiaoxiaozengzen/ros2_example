@@ -15,10 +15,10 @@
 
 #include "rclcpp/rclcpp.hpp"
 
-class BagParse : public rclcpp::Node {
+class Db3FileParseNode : public rclcpp::Node {
  public:
-    BagParse(std::string path):
-     Node("my_db3_parse_node"),
+    Db3FileParseNode(std::string path):
+     Node("db3_file_parse_node"),
      path_(path) {
         storage_options.uri = path_;
         storage_options.storage_id = "sqlite3";
@@ -32,7 +32,7 @@ class BagParse : public rclcpp::Node {
         ReaderOpen();
     }
 
-    ~BagParse() {}
+    ~Db3FileParseNode() {}
 
     void ReaderOpen() {
         reader.open(storage_options, converter_options);
@@ -106,10 +106,9 @@ class BagParse : public rclcpp::Node {
 
 int main(int argc, char** argv) {
     std::string path = argv[1];
-    // std::string path = "/home/user/cgz_workspace/dag/geely1/20221123/ppl_bag_20221123_082344_0.db3";
 
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<BagParse>(path));
+    rclcpp::spin(std::make_shared<Db3FileParseNode>(path));
     rclcpp::shutdown();
     return 0;
 }

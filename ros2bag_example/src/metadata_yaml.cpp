@@ -1,18 +1,3 @@
-// Copyright 2021, Open Source Robotics Foundation, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
 #include <example_interfaces/msg/int32.hpp>
@@ -26,7 +11,7 @@
 #include <memory>
 #include <fstream>
 
-#include "e171_msgs/msg/e171.hpp"
+#include "devastator_perception_msgs/msg/my_test.hpp"
 
 using namespace std::chrono_literals;
 
@@ -34,7 +19,7 @@ class MetaData : public rclcpp::Node
 {
 public:
   explicit MetaData(std::string path) 
-  : Node("data_generator"),
+  : Node("metadata_yaml"),
   path_(path)
   {
     Work();
@@ -55,9 +40,7 @@ public:
     std::cout << "message_count: " << bag_meta_data.message_count << std::endl;
     for (const auto& entry : bag_meta_data.topics_with_message_count) {
       std::cout << "topic name: " << entry.topic_metadata.name << " message_count: " << entry.message_count << std::endl;
-    }
-
-    
+    }    
   }
 
 private:
@@ -67,9 +50,14 @@ private:
 
 int main(int argc, char * argv[])
 {
+  if(argc < 2) {
+      std::cerr << "Usage: metadata_yaml <bag_path>" << std::endl;
+      return -1;
+  }
+  std::string bag_path = argv[1];
 
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<MetaData>("/home/user/cgz_workspace/Bag/rosbag2_2024_01_28-15_56_33"));
+  rclcpp::spin(std::make_shared<MetaData>(bag_path));
   rclcpp::shutdown();
   return 0;
 }
