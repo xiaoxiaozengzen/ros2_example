@@ -244,6 +244,21 @@ public:
         int out_size = 0;
 
         while(data.size() > 0) {
+            /**
+             * @brief Parse a Packet
+             *
+             * @param s parser context
+             * @param avctx codec context
+             * @param poutbuf 解析后得到的数据，或者nullptr(如果还没有解析出完整的一帧)
+             * @param poutbuf_size 解析后数据的大小，如果为0，表示还没有解析出完整的一帧
+             * @param buf 输入数据缓冲区
+             * @param buf_size 输入数据缓冲区大小
+             * @param pts 输入数据的PTS
+             * @param dts 输入数据的DTS
+             * @param pos 输入数据在文件中的位置
+             * 
+             * @return 返回使用了input数据流中的字节数，如果返回值等于buf_size，表示所有数据都被使用了。
+             */
             int len = av_parser_parse2(
                 parser, codec_context,
                 &out_data_ptr, &out_size,
@@ -295,21 +310,23 @@ public:
         }
     }
 
-    void Print(const CompressedVideo& video_msg, const LaneArrayV2& lane_msg) {
+    void Print(const CompressedVideo& video_msg, const LaneArrayV2& lane_msg, bool sync_lane) {
         cv::Mat image = cv::Mat::ones(2160, 3840, CV_8UC3);
 
         DecodeImage(video_msg, image);
 
-        for(auto lane : lane_msg.lane_array) {
-            for(auto point : lane.waypoints) {
-                Eigen::Vector4d point_ego(point.x, point.y, point.z, 1);
-                Eigen::Vector4d point_rfu = ego2rfu_matrix4d_ * point_ego;
-                Eigen::Vector4d point_camera = rfu2camera_matrix4d_ * point_rfu;
-                Eigen::Vector3d point_pixel = camera2pixel_matrix3d_ * point_camera.head(3);
-                point_pixel /= point_pixel(2);  // 归一化
+        if(sync_lane) {
+            for(auto lane : lane_msg.lane_array) {
+                for(auto point : lane.waypoints) {
+                    Eigen::Vector4d point_ego(point.x, point.y, point.z, 1);
+                    Eigen::Vector4d point_rfu = ego2rfu_matrix4d_ * point_ego;
+                    Eigen::Vector4d point_camera = rfu2camera_matrix4d_ * point_rfu;
+                    Eigen::Vector3d point_pixel = camera2pixel_matrix3d_ * point_camera.head(3);
+                    point_pixel /= point_pixel(2);  // 归一化
 
-                cv::Point2d point2d(point_pixel(0), point_pixel(1));
-                cv::circle(image, point2d, 5, cv::Scalar(0, 0, 255), -1);
+                    cv::Point2d point2d(point_pixel(0), point_pixel(1));
+                    cv::circle(image, point2d, 5, cv::Scalar(0, 0, 255), -1);
+                }
             }
         }
 
@@ -404,7 +421,7 @@ public:
             }
 
 
-            if(lane_available && video_available) {
+            if(video_available) {
                 double video_time = video_msg.header.stamp.sec + video_msg.header.stamp.nanosec * 1e-9;
                 double lane_time = lane_msg.header.stamp.sec + lane_msg.header.stamp.nanosec * 1e-9;
                 std::cerr << "-------Synchronized msgs at " << count_
@@ -412,7 +429,7 @@ public:
                           << std::to_string(video_time)
                           << ", lane " << std::to_string(lane_time)
                           << std::endl;
-                Print(video_msg, lane_msg);
+                Print(video_msg, lane_msg, lane_available);
             }
         }
     }
