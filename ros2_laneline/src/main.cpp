@@ -16,6 +16,8 @@ extern "C" {
 #include "libavutil/avutil.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/opt.h"
+#include "libavutil/imgutils.h"
+#include "libswscale/swscale.h"
 }
 
 #include <opencv4/opencv2/core.hpp> // OpenCV核心功能
@@ -80,6 +82,11 @@ public:
             frame = nullptr;
         }
 
+        if(parser) {
+            av_parser_close(parser);
+            parser = nullptr;
+        }
+
         if(codec_context) {
             avcodec_free_context(&codec_context);
             codec_context = nullptr;
@@ -127,6 +134,12 @@ public:
         int ret = avcodec_open2(codec_context, codec, nullptr);
         if(ret < 0) {
             std::cerr << "Could not open codec." << std::endl;
+            return false;
+        }
+
+        parser = av_parser_init(codec_context->codec_id);
+        if(parser == nullptr) {
+            std::cerr << "Could not initialize parser." << std::endl;
             return false;
         }
 
@@ -182,6 +195,39 @@ public:
         video_msg_queue_.enqueue(*msg.get());
     }
 
+    static cv::Mat avframe_to_bgr_mat(AVFrame* frame) {
+        if (!frame) {
+            return cv::Mat();
+        }
+
+        std::vector<uint8_t> yuv_data;
+        // Y
+        for(int i = 0; i < frame->height; i++) {
+            uint8_t y[frame->width];
+            memcpy(y, frame->data[0] + i * frame->linesize[0], frame->width);
+            yuv_data.insert(yuv_data.end(), y, y + frame->width);
+        }
+        // U
+        for(int i = 0; i < frame->height / 2; i++) {
+            uint8_t u[frame->width / 2];
+            memcpy(u, frame->data[1] + i * frame->linesize[1], frame->width / 2);
+            yuv_data.insert(yuv_data.end(), u, u + frame->width / 2);
+        }
+        // V
+        for(int i = 0; i < frame->height / 2; i++) {
+            uint8_t v[frame->width / 2];
+            memcpy(v, frame->data[2] + i * frame->linesize[2], frame->width / 2);
+            yuv_data.insert(yuv_data.end(), v, v + frame->width / 2);
+        }
+        
+        cv::Mat yuv(frame->height + frame->height / 2, frame->width, CV_8UC1, yuv_data.data());
+        cv::Mat bgr;
+        cv::cvtColor(yuv, bgr, cv::COLOR_YUV2BGR_I420);
+        cv::Mat out = bgr.clone(); // clone because buf will be freed
+
+        return out;
+    }
+
     void DecodeImage(const CompressedVideo& video_msg, cv::Mat& image) {
         size_t data_size = video_msg.data.size();
         std::vector<uint8_t> data(data_size);
@@ -190,55 +236,63 @@ public:
             printf("%02x ", data[i]);
         }
         printf("\n");
+        printf("Data size: %zu\n", data_size);
+        printf("NALU type: %d\n", (data[4] & 0x7E) >> 1); // H265 NALU type
 
-        // int ret = av_new_packet(packet, data_size);
-        // if(ret < 0) {
-        //     std::cerr << "Could not allocate packet." << std::endl;
-        //     return;
-        // }
+        uint8_t out_data[data_size];
+        uint8_t* out_data_ptr = &out_data[0];
+        int out_size = 0;
 
-        // memcpy(packet->data, data.data(), data_size);
-        // packet->size = data_size;
-        // packet->pts = count_;
-        // packet->duration = 1;
-        // AVRational src_tb = AVRational{1, 10}; // 假设原始时间基是毫秒
-        // AVRational dst_tb = codec_context && codec_context->time_base.num != 0 ? codec_context->time_base : AVRational{1,1000};
-        // av_packet_rescale_ts(packet, src_tb, dst_tb);
+        while(data.size() > 0) {
+            int len = av_parser_parse2(
+                parser, codec_context,
+                &out_data_ptr, &out_size,
+                data.data(), static_cast<int>(data.size()),
+                AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
+            if(len < 0) {
+                std::cerr << "av_parser_parse2 error" << std::endl;
+                break;
+            } else {
+                std::cout << "Parsed " << len << " bytes, output size: " << out_size << std::endl;
+            }
+            data.erase(data.begin(), data.begin() + len);
+            if(out_size > 0) {
+                if(av_new_packet(packet, out_size) < 0) {
+                    std::cerr << "av_new_packet failed" << std::endl;
+                    break;
+                }
+                memcpy(packet->data, out_data_ptr, out_size);
+                packet->size = out_size;
 
-        // ret = avcodec_send_packet(codec_context, packet);
-        // if(ret < 0) {
-        //     std::cerr << "Could not send packet." << std::endl;
-        //     return;
-        // }
-
-        // av_packet_unref(packet);
-
-        // while(true) {
-        //     ret = avcodec_receive_frame(codec_context, frame);
-        //     if(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-        //         break;
-        //     } else if(ret < 0) {
-        //         std::cerr << "Could not receive frame." << std::endl;
-        //         break;
-        //     }
-
-        //     std::cout << "Decoded frame: " << frame->width << "x" << frame->height << ", format: " 
-        //               << av_get_pix_fmt_name(static_cast<AVPixelFormat>(frame->format)) << std::endl;
-
-        //     // // Convert AVFrame to cv::Mat
-        //     // cv::Mat temp_frame(frame->height, frame->width, CV_8UC3);
-        //     // for(int y = 0; y < frame->height; y++) {
-        //     //     for(int x = 0; x < frame->width; x++) {
-        //     //         temp_frame.at<cv::Vec3b>(y, x)[0] = frame->data[0][y * frame->linesize[0] + x * 3 + 0]; // B
-        //     //         temp_frame.at<cv::Vec3b>(y, x)[1] = frame->data[0][y * frame->linesize[0] + x * 3 + 1]; // G
-        //     //         temp_frame.at<cv::Vec3b>(y, x)[2] = frame->data[0][y * frame->linesize[0] + x * 3 + 2]; // R
-        //     //     }
-        //     // }
-
-        //     // image = temp_frame.clone();
-
-        //     av_frame_unref(frame);
-        // }
+                int ret = avcodec_send_packet(codec_context, packet);
+                av_packet_unref(packet);
+                if(ret < 0) {
+                    std::cerr << "Could not send packet to decoder." << std::endl;
+                    break;
+                } else {
+                    while(true) {
+                        ret = avcodec_receive_frame(codec_context, frame);
+                        if(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                            break;
+                        } else if(ret < 0) {
+                            std::cerr << "Could not receive frame from decoder." << std::endl;
+                            break;
+                        }
+                        // 成功得到一帧 -> 转 BGR 并 push_back
+                        image_count_++;
+                        cv::Mat bgr = avframe_to_bgr_mat(frame);
+                        std::string output_path = "/mnt/workspace/cgz_workspace/Exercise/ros2_example/ros2_laneline/output";
+                        std::string image_name = "/frame_" + std::to_string(image_count_) + ".jpg";
+                        std::string image_path = output_path + image_name;
+                        cv::imwrite(image_path, bgr);
+                        if(!bgr.empty()) {
+                            image = bgr.clone();
+                        }
+                        av_frame_unref(frame);
+                    }
+                }
+            }
+        }
     }
 
     void Print(const CompressedVideo& video_msg, const LaneArrayV2& lane_msg) {
@@ -433,6 +487,7 @@ public:
 
 private:
     std::uint64_t count_ = 0;
+    std::uint64_t image_count_ = 0;
     std::string video_file_ = "/mnt/workspace/cgz_workspace/Exercise/ros2_example/ros2_laneline/output/output_just_laneline.avi";
     std::string calibration_path_ = "/mnt/workspace/cgz_workspace/Exercise/eigen_example/calibration";
 
@@ -460,6 +515,7 @@ private:
     AVCodec* decoder = nullptr;
     AVPacket* packet = nullptr;
     AVFrame* frame = nullptr;
+    AVCodecParserContext* parser = nullptr;
 };
 
 int main(int argc, char** argv) {
