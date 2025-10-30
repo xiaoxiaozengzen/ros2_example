@@ -9,6 +9,8 @@
 #include <deque>
 #include <iomanip>
 
+#include "libyuv.h"
+
 extern "C" {
 #include "libavformat/avformat.h"
 #include "libavcodec/avcodec.h"
@@ -77,10 +79,17 @@ public:
             packet = nullptr;
         }
 
+        av_freep(&frame->data[0]);
         if(frame) {
             av_frame_free(&frame);
             frame = nullptr;
         }
+
+        av_freep(&output_frame->data[0]);
+        av_freep(&output_frame->data[1]);
+        av_freep(&output_frame->data[2]);
+        av_frame_free(&output_frame);
+        output_frame = nullptr;
 
         if(parser) {
             av_parser_close(parser);
@@ -105,6 +114,12 @@ public:
             return false;
         }
 
+        video_writer_.open(video_file_, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, cv::Size(3840, 2160));
+        if (!video_writer_.isOpened()) {
+            std::cerr << "Failed to open video file: " << video_file_ << std::endl;
+            return false;
+        }
+
         lane_sub_ = this->create_subscription<LaneArrayV2>(
             "/perception/lane_array_result", 10, std::bind(&LaneLineNode::LaneCallback, this, std::placeholders::_1));
 
@@ -117,19 +132,20 @@ public:
             return false;
         }
 
-        codec_context = avcodec_alloc_context3(nullptr);
-        if(codec_context == nullptr) {
-            std::cerr << "Could not allocate codec context." << std::endl;
-            return false;
-        }
-        codec_context->codec_type = AVMEDIA_TYPE_VIDEO;
-        codec_context->codec_id = AV_CODEC_ID_H265;
-
-        AVCodec *codec = avcodec_find_decoder(codec_context->codec_id);
+        AVCodec *codec = avcodec_find_decoder(AVCodecID::AV_CODEC_ID_HEVC);
         if(codec == nullptr) {
             std::cerr << "Could not find decoder for codec id " << codec_context->codec_id << std::endl;
             return false;
         }
+
+        // 如果codec不是空指针，则再调用avcodec_open2时使用不用的codec是不合法的
+        codec_context = avcodec_alloc_context3(codec);
+        if(codec_context == nullptr) {
+            std::cerr << "Could not allocate codec context." << std::endl;
+            return false;
+        }
+        codec_context->flags |= AV_CODEC_FLAG_LOW_DELAY;
+        codec_context->flags |= AV_CODEC_FLAG2_FAST;
 
         int ret = avcodec_open2(codec_context, codec, nullptr);
         if(ret < 0) {
@@ -137,15 +153,46 @@ public:
             return false;
         }
 
-        parser = av_parser_init(codec_context->codec_id);
+
+        /**
+         * @brief 
+         *
+         * struct AVCodecParserContext {
+         *  void *priv_data;
+         *  struct AVCodecParser *parser;
+         *  int64_t frame_offset;  // 当前帧在输入流中的偏移量
+         *  int64_t cur_offset;  // 会随着每次av_parser_parse2调用而更新
+         *  int64_t next_frame_offset;  // 下一帧在输入流中的偏移量
+         *  int pict_type;  // 当前帧的图片类型，会放回AVCodecContext中的pict_type
+         *  int repeat_pict;  // 重复图片的数量，会放回AVCodecContext中的repeat_pict
+         *  int64_t pts;  // 当前帧的显示时间戳
+         *  int64_t dts;  // 当前帧的解码时间戳
+         *  int64_t last_pts;  // 上一帧的显示时间戳，内部使用
+         *  int64_t last_dts;  // 上一帧的解码时间戳，内部使用
+         *  int fetch_timestamp;  // 是否获取时间戳，内部使用
+         *  int cur_frame_start_index;  // 当前帧的起始索引
+         *  int flags;  // 解析器标志
+         *  ... // 其他成员省略
+         * }
+         * 
+         * 其中 flags：
+         *  - PARSER_FLAG_COMPLETE_FRAMES: 表示解析器应该只返回完整的帧。
+         *  - PARSER_FLAG_ONCE: 表示解析器应该只解析一次输入数据。
+         *  - PARSER_FLAG_FETCH_TIMESTAMP: 表示解析器应该获取时间戳信息。
+         *  - PARSER_FLAG_USE_CODEC_TS: 表示解析器应该使用编解码器的时间戳。
+         */
+        parser = av_parser_init(codec->id);
         if(parser == nullptr) {
             std::cerr << "Could not initialize parser." << std::endl;
             return false;
         }
+        parser->flags |= PARSER_FLAG_COMPLETE_FRAMES; // 强制输出完整帧
+        parser->flags &= ~PARSER_FLAG_ONCE;          // 禁用单次解析模式（允许多次调用）
 
         packet = av_packet_alloc();
         frame = av_frame_alloc();
-        if(packet == nullptr || frame == nullptr) {
+        output_frame = av_frame_alloc();
+        if(packet == nullptr || output_frame == nullptr || frame == nullptr) {
             std::cerr << "Could not allocate packet or frame." << std::endl;
             return false;
         }
@@ -195,55 +242,143 @@ public:
         video_msg_queue_.enqueue(*msg.get());
     }
 
-    static cv::Mat avframe_to_bgr_mat(AVFrame* frame) {
+    cv::Mat avframe_to_bgr_mat(AVFrame* frame) {
         if (!frame) {
             return cv::Mat();
         }
 
-        std::vector<uint8_t> yuv_data;
-        // Y
-        for(int i = 0; i < frame->height; i++) {
-            uint8_t y[frame->width];
-            memcpy(y, frame->data[0] + i * frame->linesize[0], frame->width);
-            yuv_data.insert(yuv_data.end(), y, y + frame->width);
+        int w = frame->width, h = frame->height;
+        output_frame->width = w;
+        output_frame->height = h;
+        output_frame->format = AV_PIX_FMT_BGR24;
+
+        int ret = av_image_alloc(output_frame->data, output_frame->linesize,
+                                 output_frame->width, output_frame->height, AV_PIX_FMT_BGR24, 1);
+        if (ret < 0) {
+            std::cerr << "Could not allocate output image." << std::endl;
+            return cv::Mat();
         }
-        // U
-        for(int i = 0; i < frame->height / 2; i++) {
-            uint8_t u[frame->width / 2];
-            memcpy(u, frame->data[1] + i * frame->linesize[1], frame->width / 2);
-            yuv_data.insert(yuv_data.end(), u, u + frame->width / 2);
-        }
-        // V
-        for(int i = 0; i < frame->height / 2; i++) {
-            uint8_t v[frame->width / 2];
-            memcpy(v, frame->data[2] + i * frame->linesize[2], frame->width / 2);
-            yuv_data.insert(yuv_data.end(), v, v + frame->width / 2);
+
+        ret = libyuv::ConvertFromI420(
+            frame->data[0], frame->width,
+            frame->data[1], frame->width / 2,
+            frame->data[2], frame->width / 2,
+            output_frame->data[0], output_frame->width * 3,
+            frame->width, frame->height, libyuv::FOURCC_24BG); // Four character code for BGR24
+        if (ret != 0) {
+            std::cerr << "libyuv::ConvertFromI420 failed with error code: " << ret << std::endl;
+            return cv::Mat();
         }
         
-        cv::Mat yuv(frame->height + frame->height / 2, frame->width, CV_8UC1, yuv_data.data());
-        cv::Mat bgr;
-        cv::cvtColor(yuv, bgr, cv::COLOR_YUV2BGR_I420);
-        cv::Mat out = bgr.clone(); // clone because buf will be freed
+        // // Fast path for YUV420P
+        // if (frame->format == AV_PIX_FMT_YUV420P) {
+        //     /**
+        //      * @brief 返回给定像素格式、宽度和高度的一张张图片所需的缓冲区大小（以字节为单位）。
+        //      *
+        //      * @param pix_fmt 像素格式
+        //      * @param width 图片宽度
+        //      * @param height 图片高度
+        //      * @param align 对齐方式，通常为1
+        //      *
+        //      * @return 成功：所需的缓冲区大小（以字节为单位）；失败：负值错误代码
+        //      */
+        //     int numBytes = av_image_get_buffer_size((AVPixelFormat)frame->format, w, h, 1);
+        //     std::cout << "YUV420P buffer size: " << numBytes << std::endl;
 
-        return out;
+        //     std::vector<uint8_t> buf(numBytes);
+        //     /**
+        //      * @brief 将图像数据拷贝到一个buffer中
+        //      *
+        //      * @param dst 目标缓冲区
+        //      * @param dst_size 目标缓冲区大小
+        //      * @param src_data 源图像数据指针数组
+        //      * @param src_linesize 源图像每行的字节数数组
+        //      * @param pix_fmt 像素格式
+        //      * @param width 图像宽度
+        //      * @param height 图像高度
+        //      * @param align 对齐方式，通常为1
+        //      *
+        //      * @return 成功：拷贝的字节数；失败：负值错误代码
+        //      */
+        //     av_image_copy_to_buffer(buf.data(), buf.size(), frame->data, frame->linesize,
+        //                             (AVPixelFormat)frame->format, w, h, 1);
+            
+        //     // yuv420p 转 bgr
+        //     cv::Mat yuv(h + h/2, w, CV_8UC1, buf.data());
+        //     cv::Mat bgr;
+        //     cv::cvtColor(yuv, bgr, cv::COLOR_YUV2BGR_I420); // I420 == YUV420P
+        //     return bgr.clone();
+        // }
+        
+        // /**
+        //  * @brief SwsContext 主要用于处理图片像素数据，例如图片像素的格式转换、缩放等操作。
+        //  * struct SwsContext {
+        //  *  const AVClass *av_class;
+        //  *  SwsFunc swscale;
+        //  *  int srcW, srcH;  // 源图像宽度和高度，luma/alpha planes
+        //  *  int dstH;  // 目标图像宽度和高度，luma/alpha planes
+        //  *  int chrSrcW, chrSrcH;  // 源图像宽度和高度，chroma planes
+        //  *  int chrDstW, chrDstH;  // 目标图像宽度和高度，chroma planes
+        //  *  int srcFormat;  // 源图像像素格式
+        //  *  ... 其他成员变量
+        //  * }
+        //  */
+
+        // /**
+        //  * @brief 返回给定源和目标图像参数的SwsContext，用于图像缩放和格式转换。
+        //  *
+        //  * @param srcW 源图像宽度
+        //  * @param srcH 源图像高度
+        //  * @param srcFormat 源图像像素格式
+        //  * @param dstW 目标图像宽度
+        //  * @param dstH 目标图像高度
+        //  * @param dstFormat 目标图像像素格式
+        //  * @param flags 缩放算法标志
+        //  *
+        //  * @return 成功：指向SwsContext的指针；失败：nullptr
+        //  */
+        // SwsContext* sws = sws_getContext(w, h, (AVPixelFormat)frame->format,
+        //                                 w, h, AV_PIX_FMT_BGR24,
+        //                                 SWS_BILINEAR, nullptr, nullptr, nullptr);
+        // if (!sws) {
+        //     return cv::Mat();
+        // }
+
+        // std::vector<uint8_t> dstbuf(w * h * 3);
+        // uint8_t* dest[4] = { dstbuf.data(), nullptr, nullptr, nullptr };
+        // int dest_linesize[4] = { w * 3, 0, 0, 0 };
+
+        // /**
+        //  * @brief 将slice图片数据进行scale转换，并将结果存储到目标缓冲区中。slice指的是按行排队组成的图片数据。
+        //  *
+        //  * @param c SwsContext上下文
+        //  * @param srcSlice 源图片数据指针数组
+        //  * @param srcStride 源图片每行的字节数数组
+        //  * @param srcSliceY 源图片中处理数据的位置，即第一行某个位置开始
+        //  * @param srcSliceH 源图片的高度，即行数
+        //  * @param dst 源图片数据指针数组
+        //  * @param dstStride 目标图片每行的字节数数组
+        //  */
+        // sws_scale(sws, frame->data, frame->linesize, 0, h, dest, dest_linesize);
+        // sws_freeContext(sws);
+        cv::Mat bgr(output_frame->height, output_frame->width, CV_8UC3, output_frame->data[0]);
+        return bgr.clone();
     }
 
     void DecodeImage(const CompressedVideo& video_msg, cv::Mat& image) {
-        size_t data_size = video_msg.data.size();
-        std::vector<uint8_t> data(data_size);
-        memcpy(data.data(), video_msg.data.data(), data_size);
+        const uint8_t* data_in = video_msg.data.data();
+        int data_size = static_cast<int>(video_msg.data.size());
         for(int i = 0; i < 8; ++i) {
-            printf("%02x ", data[i]);
+            printf("%02x ", data_in[i]);
         }
         printf("\n");
-        printf("Data size: %zu\n", data_size);
-        printf("NALU type: %d\n", (data[4] & 0x7E) >> 1); // H265 NALU type
+        printf("Data size: %u\n", data_size);
+        printf("NALU type: %d\n", (data_in[4] & 0x7E) >> 1); // H265 NALU type
 
-        uint8_t out_data[data_size];
-        uint8_t* out_data_ptr = &out_data[0];
-        int out_size = 0;
+        while(data_size > 0) {
+            uint8_t* out_data_ptr = nullptr;
+            int out_size = 0;
 
-        while(data.size() > 0) {
             /**
              * @brief Parse a Packet
              *
@@ -262,7 +397,7 @@ public:
             int len = av_parser_parse2(
                 parser, codec_context,
                 &out_data_ptr, &out_size,
-                data.data(), static_cast<int>(data.size()),
+                data_in, data_size,
                 AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
             if(len < 0) {
                 std::cerr << "av_parser_parse2 error" << std::endl;
@@ -270,8 +405,11 @@ public:
             } else {
                 std::cout << "Parsed " << len << " bytes, output size: " << out_size << std::endl;
             }
-            data.erase(data.begin(), data.begin() + len);
+            data_in += len;
+            data_size -= len;
+
             if(out_size > 0) {
+                av_packet_unref(packet);
                 if(av_new_packet(packet, out_size) < 0) {
                     std::cerr << "av_new_packet failed" << std::endl;
                     break;
@@ -279,8 +417,8 @@ public:
                 memcpy(packet->data, out_data_ptr, out_size);
                 packet->size = out_size;
 
+                std::chrono::system_clock::time_point startDecodeOneFrame = std::chrono::high_resolution_clock::now();
                 int ret = avcodec_send_packet(codec_context, packet);
-                av_packet_unref(packet);
                 if(ret < 0) {
                     std::cerr << "Could not send packet to decoder." << std::endl;
                     break;
@@ -293,6 +431,15 @@ public:
                             std::cerr << "Could not receive frame from decoder." << std::endl;
                             break;
                         }
+
+                        std::chrono::system_clock::time_point endDecodeOneFrame = std::chrono::high_resolution_clock::now();
+                        std::chrono::duration<double, std::milli> decode_duration = std::chrono::duration_cast<std::chrono::milliseconds>(endDecodeOneFrame - startDecodeOneFrame);
+                        std::cout << "Decoded one frame in " << decode_duration.count() << " ms." << std::endl;
+                        std::cout << "Frame width: " << frame->width << ", height: " << frame->height << ", format: " << av_get_pix_fmt_name((AVPixelFormat)frame->format) << std::endl;
+                        std::cout << "Frame key_frame: " << frame->key_frame << std::endl;
+                        std::cout << "Frame dts: " << frame->pkt_dts << ", pts: " << frame->pts << std::endl;
+                        std::cout << "Frame pict_type: " << av_get_picture_type_char(frame->pict_type) << std::endl;
+
                         // 成功得到一帧 -> 转 BGR 并 push_back
                         image_count_++;
                         cv::Mat bgr = avframe_to_bgr_mat(frame);
@@ -493,12 +640,6 @@ public:
       camera2pixel_matrix3d_ = camera2pixel_matrix3d;
       std::cout << "camera2pixel_matrix3d: " << std::endl << camera2pixel_matrix3d << std::endl;
 
-      video_writer_.open(video_file_, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, cv::Size(3840, 2160));
-      if (!video_writer_.isOpened()) {
-          std::cerr << "Failed to open video file: " << video_file_ << std::endl;
-          return -1;
-      }
-
       return 0;
     }
 
@@ -532,6 +673,7 @@ private:
     AVCodec* decoder = nullptr;
     AVPacket* packet = nullptr;
     AVFrame* frame = nullptr;
+    AVFrame* output_frame = nullptr;
     AVCodecParserContext* parser = nullptr;
 };
 
