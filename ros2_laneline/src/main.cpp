@@ -606,13 +606,13 @@ public:
       // rfu2camera
       std::array<double, 3> translation_rfu2camera;
       std::array<double, 4> rotation_rfu2camera;
-      translation_rfu2camera[0] = 0.02120796734209838;
-      translation_rfu2camera[1] = 1.5566029441557836;
-      translation_rfu2camera[2] = -2.0829265465698885;
-      rotation_rfu2camera[0] = 0.7044463824383106;
-      rotation_rfu2camera[1] = 0.7097165737575503;
-      rotation_rfu2camera[2] = -0.006408297327490251;
-      rotation_rfu2camera[3] = -0.004075896071251731;
+      translation_rfu2camera[0] = 0.0090819930136649251;
+      translation_rfu2camera[1] = 1.5216280634858648;
+      translation_rfu2camera[2] = -2.1103861544175619;
+      rotation_rfu2camera[0] = 0.71034482716454361;
+      rotation_rfu2camera[1] = 0.70384295189462198;
+      rotation_rfu2camera[2] = -0.0034866138763442159;
+      rotation_rfu2camera[3] = -0.0017802001339179891;
       Eigen::Vector3d translation_eigen_rfu2camera(translation_rfu2camera[0], translation_rfu2camera[1], translation_rfu2camera[2]);
       Eigen::Translation3d translation_matrix_rfu2camera(translation_eigen_rfu2camera);
       Eigen::Quaterniond rotation_eigen_rfu2camera(rotation_rfu2camera[0], rotation_rfu2camera[1], rotation_rfu2camera[2], rotation_rfu2camera[3]);
@@ -622,10 +622,10 @@ public:
       std::cout << "rfu2camera_matrix4d: " << std::endl << rfu2camera_matrix4d << std::endl;
 
       // camera2pixel
-      double fx = 7314.1068504287596;
-      double fy = 7310.9106790563401;
-      double cx = 1912.5121782628;
-      double cy = 1066.95209113283;
+      double fx = 1907.4669924903601;
+      double fy = 1907.9208273034901;
+      double cx = 1928.6564310669601;
+      double cy = 1086.4753880554999;
       Eigen::Matrix3d camera2pixel_matrix3d;
       camera2pixel_matrix3d << fx, 0, cx,
                                0, fy, cy,
