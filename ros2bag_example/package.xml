@@ -17,6 +17,7 @@
   <depend>devastator_perception_msgs</depend>
   <depend>Eigen3</depend>
   <depend>yaml_cpp_vendor</depend>
+  <depend>mcap_vendor</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

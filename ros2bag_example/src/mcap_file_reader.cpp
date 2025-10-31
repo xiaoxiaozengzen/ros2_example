@@ -1,6 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
-#include <example_interfaces/msg/int32.hpp>
 
 #include <rosbag2_cpp/writer.hpp>
 #include <rosbag2_cpp/writers/sequential_writer.hpp>

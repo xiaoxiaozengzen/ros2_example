@@ -8,7 +8,7 @@ endif()
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 17)
 endif()
 set(CMAKE_BUILD_TYPE "Debug")
 
@@ -29,5 +29,6 @@ ament_auto_add_executable(mcap_file_reader_exe src/mcap_file_reader.cpp)
 ament_auto_add_executable(ros2_bag_play_exe src/ros2_bag_play.cpp)
 ament_auto_add_executable(metadata_yaml_exe src/metadata_yaml.cpp)
 ament_auto_add_executable(data_generate_exe src/data_generate.cpp)
+ament_auto_add_executable(mcap_file_reader_foxglove_exe src/mcap_file_reader_foxglove.cpp)
 
 ament_auto_package()
