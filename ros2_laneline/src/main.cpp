@@ -146,6 +146,9 @@ public:
         }
         codec_context->flags |= AV_CODEC_FLAG_LOW_DELAY;
         codec_context->flags |= AV_CODEC_FLAG2_FAST;
+        codec_context->max_pixels = 3840 * 2160 * 3;
+        av_opt_set(codec_context->priv_data, "tune", "zerolatency", 0);
+        av_opt_set(codec_context->priv_data, "preset", "superfast", 0);
 
         int ret = avcodec_open2(codec_context, codec, nullptr);
         if(ret < 0) {
@@ -225,21 +228,13 @@ public:
     void CompressedVideoCallback(const CompressedVideo::SharedPtr msg) {
         static double last_timestamp = 0.0;
         double current_timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
-        if(current_timestamp - last_timestamp < 0.05) {
+        if(current_timestamp - last_timestamp < 0.005) {
             return;
         }
         last_timestamp = current_timestamp;
 
-        {
-            std::lock_guard<std::mutex> lock(video_mutex_);
-            if(video_queue_.size() >= max_queue_size_) {
-                video_queue_.pop_front();
-            }
-
-            video_queue_.push_back(*msg.get());
-        }
-
         video_msg_queue_.enqueue(*msg.get());
+        std::cout << "+++++++++++ CompressedVideoCallback video_msg_queue_ size: " << video_msg_queue_.size() << std::endl;
     }
 
     cv::Mat avframe_to_bgr_mat(AVFrame* frame) {
@@ -376,9 +371,6 @@ public:
         printf("NALU type: %d\n", (data_in[4] & 0x7E) >> 1); // H265 NALU type
 
         while(data_size > 0) {
-            uint8_t* out_data_ptr = nullptr;
-            int out_size = 0;
-
             /**
              * @brief Parse a Packet
              *
@@ -396,31 +388,31 @@ public:
              */
             int len = av_parser_parse2(
                 parser, codec_context,
-                &out_data_ptr, &out_size,
+                &packet->data, &packet->size,
                 data_in, data_size,
                 AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
             if(len < 0) {
                 std::cerr << "av_parser_parse2 error" << std::endl;
                 break;
             } else {
-                std::cout << "Parsed " << len << " bytes, output size: " << out_size << std::endl;
+                std::cout << "Parsed " << len << " bytes, output size: " << packet->size << std::endl;
             }
             data_in += len;
             data_size -= len;
 
-            if(out_size > 0) {
-                av_packet_unref(packet);
-                if(av_new_packet(packet, out_size) < 0) {
-                    std::cerr << "av_new_packet failed" << std::endl;
-                    break;
+            if(packet->size > 0) {
+                if(packet->buf != nullptr) {
+                    std::cout << "Packet buffer: " << packet->buf << std::endl;
                 }
-                memcpy(packet->data, out_data_ptr, out_size);
-                packet->size = out_size;
+                std::cout << "Packet pts: " << packet->pts << ", dts: " << packet->dts << ", size: " << packet->size << std::endl;
+                std::cout << "Packet stream_index: " << packet->stream_index << std::endl;
+                std::cout << "Packet duration: " << packet->duration << ", pos: " << packet->pos << std::endl;
 
                 std::chrono::system_clock::time_point startDecodeOneFrame = std::chrono::high_resolution_clock::now();
                 int ret = avcodec_send_packet(codec_context, packet);
                 if(ret < 0) {
                     std::cerr << "Could not send packet to decoder." << std::endl;
+                    av_packet_unref(packet);
                     break;
                 } else {
                     while(true) {
@@ -453,6 +445,7 @@ public:
                         av_frame_unref(frame);
                     }
                 }
+                av_packet_unref(packet);
             }
         }
     }
@@ -663,7 +656,7 @@ private:
     std::mutex video_mutex_;
     std::uint16_t max_queue_size_ = 500;
 
-    BoundedBlockingQueue<CompressedVideo> video_msg_queue_{2};
+    BoundedBlockingQueue<CompressedVideo> video_msg_queue_{500};
 
     std::atomic<bool> running_{false};
     std::thread sync_thread_;
