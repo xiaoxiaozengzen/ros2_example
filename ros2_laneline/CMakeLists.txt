@@ -19,8 +19,8 @@ endif()
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
-file(GLOB_RECURSE ROS2_LANELINE_SRCS "src/*.cpp")
-ament_auto_add_executable(${PROJECT_NAME}_exe ${ROS2_LANELINE_SRCS})
+ament_auto_add_executable(${PROJECT_NAME}_exe src/sync_lane_with_image.cpp)
+ament_auto_add_executable(encoder_image src/encoder_image.cpp)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
