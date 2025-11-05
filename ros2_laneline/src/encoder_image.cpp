@@ -113,8 +113,6 @@ public:
         codec_context->width = 3840;
         codec_context->height = 2160;
         codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
-        // codec_context->thread_count = std::max(1u, std::thread::hardware_concurrency() - 1);
-        // codec_context->thread_type = FF_THREAD_FRAME;
         av_opt_set(codec_context->priv_data, "preset", "superfast", 0);
         av_opt_set(codec_context->priv_data, "tune", "zerolatency", 0);
 
