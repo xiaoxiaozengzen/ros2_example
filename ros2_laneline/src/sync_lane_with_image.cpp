@@ -298,6 +298,8 @@ public:
              *  int srcFormat;  // 源图像像素格式
              *  ... 其他成员变量
              * }
+             *
+             * @note luma表示像素的明暗信息(Y)；chroma表示颜色信息(U/V)；alpha表示透明度
              */
 
             /**
