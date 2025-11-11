@@ -15,20 +15,23 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# 编译的时候会打印这个变量，但是printenv的时候不会打印
-message("ENV{CMAKE_PREFIX_PATH} = $ENV{CMAKE_PREFIX_PATH}")
+# 编译的时候会打印环境变量CMAKE_PREFIX_PATH，但是在编译结束后printenv的时候不会打印这个环境变量
+# 如果source了install/setup.bash之后，printenv会打印环境变量CMAKE_PREFIX_PATH
+message("HELLO ENV{CMAKE_PREFIX_PATH} = $ENV{CMAKE_PREFIX_PATH}")
+message("HELLO CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
+message("HELLO ENV{AMENT_PREFIX_PATH} = $ENV{AMENT_PREFIX_PATH}")
+message("HELLO AMENT_PREFIX_PATH = ${AMENT_PREFIX_PATH}")
+
 if(DEFINED CMAKE_PREFIX_PATH)
-  message("CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
+  message("HELLO CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
 else()
-  message("CMAKE_PREFIX_PATH is not defined")
+  message("HELLO CMAKE_PREFIX_PATH is not defined")
 endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-message("ament_cmake_DIR = ${ament_cmake_DIR}")
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
+message("HELLO ament_cmake_DIR = ${ament_cmake_DIR}")
+
 add_library(hello SHARED
   src/hello.cpp)
 

@@ -15,6 +15,13 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+# 编译得时候，会将所有得依赖包的路径都添加到CMAKE_PREFIX_PATH/AMENT_PREFIX_PATH环境变量中
+# 编译结束后，source了install/setup.bash之后，printenv会打印出最新得CMAKE_PREFIX_PATH/AMENT_PREFIX_PATH
+message("MY_AMENT_EXAMPLE ENV{CMAKE_PREFIX_PATH} = $ENV{CMAKE_PREFIX_PATH}")
+message("MY_AMENT_EXAMPLE CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
+message("MY_AMENT_EXAMPLE ENV{AMENT_PREFIX_PATH} = $ENV{AMENT_PREFIX_PATH}")
+message("MY_AMENT_EXAMPLE AMENT_PREFIX_PATH = ${AMENT_PREFIX_PATH}")
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in

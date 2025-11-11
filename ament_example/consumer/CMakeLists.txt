@@ -15,6 +15,11 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+message("CONSUMER ENV{CMAKE_PREFIX_PATH} = $ENV{CMAKE_PREFIX_PATH}")
+message("CONSUMER CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
+message("CONSUMER ENV{AMENT_PREFIX_PATH} = $ENV{AMENT_PREFIX_PATH}")
+message("CONSUMER AMENT_PREFIX_PATH = ${AMENT_PREFIX_PATH}")
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in
