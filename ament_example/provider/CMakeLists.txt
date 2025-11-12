@@ -36,6 +36,11 @@ message("PROVIDER hello_FOUND: ${hello_FOUND}")
 message("PROVIDER hello_DIR: ${hello_DIR}")
 message("PROVIDER hello_INCLUDE_DIRS: ${hello_INCLUDE_DIRS}")
 message("PROVIDER hello_LIBRARIES: ${hello_LIBRARIES}")
+if(HELLO_OPTION)
+  message("PROVIDER HELLO_OPTION is set to ${HELLO_OPTION}")
+else()
+  message("PROVIDER HELLO_OPTION is not set")
+endif()
 
 ament_auto_add_library(provider_lib SHARED
   src/provider_lib.cpp)

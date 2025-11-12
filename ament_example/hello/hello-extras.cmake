@@ -1,0 +1,1 @@
+option(HELLO_OPTION "An example option" ON)
