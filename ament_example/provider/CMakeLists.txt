@@ -23,13 +23,32 @@ find_package(ament_cmake_auto REQUIRED)
 # find_package(<dependency> REQUIRED)
 ament_auto_find_build_dependencies(REQUIRED nihao)
 
-message("nihao_INCLUDE_DIRS: ${nihao_INCLUDE_DIRS}")
-message("nihao_LIBRARIES: ${nihao_LIBRARIES}")
+message("PROVIDER CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+message("PROVIDER ENV{CMAKE_PREFIX_PATH}: $ENV{CMAKE_PREFIX_PATH}")
+message("PROVDIER nihao_FOUND: ${nihao_FOUND}")
+message("PROVIDER nihao_DIR: ${nihao_DIR}")
+message("PROVIDER nihao_INCLUDE_DIRS: ${nihao_INCLUDE_DIRS}")
+message("PROVIDER nihao_LIBRARIES: ${nihao_LIBRARIES}")
+message("PROVIDER hello_FOUND: ${hello_FOUND}")
+
+find_package(hello REQUIRED)
+message("PROVIDER hello_FOUND: ${hello_FOUND}")
+message("PROVIDER hello_DIR: ${hello_DIR}")
+message("PROVIDER hello_INCLUDE_DIRS: ${hello_INCLUDE_DIRS}")
+message("PROVIDER hello_LIBRARIES: ${hello_LIBRARIES}")
 
 ament_auto_add_library(provider_lib SHARED
   src/provider_lib.cpp)
+target_include_directories(provider_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${hello_INCLUDE_DIRS}
+)
+target_link_libraries(provider_lib ${hello_LIBRARIES})
 
 ament_auto_add_executable(provider src/provider.cpp)
+target_include_directories(provider PUBLIC ${hello_INCLUDE_DIRS})
+target_link_libraries(provider ${hello_LIBRARIES})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
