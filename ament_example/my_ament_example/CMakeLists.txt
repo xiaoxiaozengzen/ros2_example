@@ -30,6 +30,13 @@ find_package(ament_cmake REQUIRED)
 find_package(hello REQUIRED)
 find_package(world REQUIRED)
 
+find_package(plus REQUIRED)
+
+message("MY_AMENT_EXAMPLE plus_FOUND = ${plus_FOUND}")
+message("MY_AMENT_EXAMPLE plus_DIR = ${plus_DIR}")
+message("MY_AMENT_EXAMPLE plus_INCLUDE_DIRS = ${plus_INCLUDE_DIRS}")
+message("MY_AMENT_EXAMPLE plus_LIBRARIES = ${plus_LIBRARIES}")
+
 add_library(my_ament_example SHARED
   src/my_ament_example.cpp)
 
@@ -52,6 +59,9 @@ target_link_libraries(my_ament_example PRIVATE
   ${world_LIBRARIES}
 )
 
+target_include_directories(my_ament_example PUBLIC ${plus_INCLUDE_DIRS})
+target_link_libraries(my_ament_example PRIVATE ${plus_LIBRARIES})
+
 install(TARGETS my_ament_example
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -63,7 +73,7 @@ install(DIRECTORY include/
 
 ament_export_include_directories(include)
 ament_export_libraries(my_ament_example)
-ament_export_dependencies(hello)
+ament_export_dependencies(hello plus)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

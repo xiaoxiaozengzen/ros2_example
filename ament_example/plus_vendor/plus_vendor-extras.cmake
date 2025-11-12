@@ -1,0 +1,6 @@
+if(plus_DIR)
+  message("PLUS_VENDOR plus_DIR is set to ${plus_DIR}")
+else()
+  message("PLUS_VENDOR plus_DIR is not set")
+endif()
+message("PLUS_VENDOR plus_vendor_DIR: ${plus_vendor_DIR}")

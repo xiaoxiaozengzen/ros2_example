@@ -40,8 +40,8 @@ ament_target_dependencies(consumer
   world
 )
 
-message("my_ament_example_INCLUDE_DIRS: ${my_ament_example_INCLUDE_DIRS}")
-message("my_ament_example_LIBRARIES: ${my_ament_example_LIBRARIES}")
+message("CONSUMER my_ament_example_INCLUDE_DIRS: ${my_ament_example_INCLUDE_DIRS}")
+message("CONSUMER my_ament_example_LIBRARIES: ${my_ament_example_LIBRARIES}")
 
 
 install(TARGETS
